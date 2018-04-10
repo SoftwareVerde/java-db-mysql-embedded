@@ -19,8 +19,9 @@ public class DatabaseInitializer {
     protected final DatabaseUpgradeHandler _databaseUpgradeHandler;
 
     protected String _getResource(final String resourceFile) {
-        final InputStream resourceStream = this.getClass().getResourceAsStream(resourceFile);
-        if (resourceStream == null) { return ""; }
+        final ClassLoader classLoader = this.getClass().getClassLoader();
+        final InputStream resourceStream = classLoader.getResourceAsStream(resourceFile);
+        if (resourceStream == null) { return null; }
         return IoUtil.streamToString(resourceStream);
     }
 
@@ -58,7 +59,10 @@ public class DatabaseInitializer {
 
         try {
             if (databaseVersionNumber < 1) {
-                final String query = _getResource("queries/metadata_init.sql");
+                final String metadataInitSqlFile = "queries/metadata_init.sql";
+                final String query = _getResource(metadataInitSqlFile);
+                if (query == null) { throw new RuntimeException("Unable to load: "+ metadataInitSqlFile); }
+
                 databaseInstance.run(query, maintenanceCredentials.username, maintenanceCredentials.password, maintenanceCredentials.schema);
                 if (_initSqlFileName != null) {
                     databaseInstance.source(_initSqlFileName, maintenanceCredentials.username, maintenanceCredentials.password, maintenanceCredentials.schema);
