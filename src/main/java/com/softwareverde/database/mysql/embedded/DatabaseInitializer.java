@@ -4,7 +4,9 @@ import com.softwareverde.database.DatabaseException;
 import com.softwareverde.database.Row;
 import com.softwareverde.database.mysql.MysqlDatabaseConnection;
 import com.softwareverde.database.mysql.embedded.vorburger.DB;
+import com.softwareverde.util.IoUtil;
 
+import java.io.InputStream;
 import java.util.List;
 
 public class DatabaseInitializer {
@@ -15,6 +17,12 @@ public class DatabaseInitializer {
     protected final String _initSqlFileName;
     protected final Integer _requiredDatabaseVersion;
     protected final DatabaseUpgradeHandler _databaseUpgradeHandler;
+
+    protected String _getResource(final String resourceFile) {
+        final InputStream resourceStream = this.getClass().getResourceAsStream(resourceFile);
+        if (resourceStream == null) { return ""; }
+        return IoUtil.streamToString(resourceStream);
+    }
 
     public DatabaseInitializer() {
         _initSqlFileName = null;
@@ -50,7 +58,8 @@ public class DatabaseInitializer {
 
         try {
             if (databaseVersionNumber < 1) {
-                databaseInstance.source("queries/metadata_init.sql", maintenanceCredentials.username, maintenanceCredentials.password, maintenanceCredentials.schema);
+                final String query = _getResource("queries/metadata_init.sql");
+                databaseInstance.run(query, maintenanceCredentials.username, maintenanceCredentials.password, maintenanceCredentials.schema);
                 if (_initSqlFileName != null) {
                     databaseInstance.source(_initSqlFileName, maintenanceCredentials.username, maintenanceCredentials.password, maintenanceCredentials.schema);
                 }

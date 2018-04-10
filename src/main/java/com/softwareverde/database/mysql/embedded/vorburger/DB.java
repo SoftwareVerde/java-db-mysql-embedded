@@ -56,6 +56,15 @@ public class DB {
         }
     }
 
+    public void run(final String resource, final String username, final String password, final String dbName) throws DatabaseException {
+        try {
+            _db.run(resource, username, password, dbName);
+        }
+        catch (final ManagedProcessException exception) {
+            throw new DatabaseException(exception);
+        }
+    }
+
     public ch.vorburger.mariadb4j.DB getRawDb() {
         return _db;
     }
