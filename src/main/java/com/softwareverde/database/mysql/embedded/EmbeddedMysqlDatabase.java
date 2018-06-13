@@ -16,7 +16,7 @@ public class EmbeddedMysqlDatabase implements Database<Connection> {
     protected DB _databaseInstance;
     protected MysqlDatabaseConnectionFactory _databaseConnectionFactory;
 
-    protected void _loadDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer) throws DatabaseException {
+    protected void _loadDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments) throws DatabaseException {
         final String rootHost = "127.0.0.1";
 
         final Credentials defaultRootCredentials;
@@ -45,6 +45,9 @@ public class EmbeddedMysqlDatabase implements Database<Connection> {
             configBuilder.setPort(databaseProperties.getPort());
             configBuilder.setDataDir(databaseProperties.getDataDirectory());
             configBuilder.setSecurityDisabled(false);
+            for (final String argument : databaseCommandLineArguments.getArguments()) {
+                configBuilder.addArgument(argument);
+            }
             dbConfiguration = configBuilder.build();
 
             final String connectionString = configBuilder.getURL(credentials.schema);
@@ -140,11 +143,17 @@ public class EmbeddedMysqlDatabase implements Database<Connection> {
 
     public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties) throws DatabaseException {
         final DatabaseInitializer databaseInitializer = new DatabaseInitializer();
-        _loadDatabase(databaseProperties, databaseInitializer);
+        final DatabaseCommandLineArguments databaseCommandLineArguments = new DatabaseCommandLineArguments();
+        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments);
     }
 
     public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer) throws DatabaseException {
-        _loadDatabase(databaseProperties, databaseInitializer);
+        final DatabaseCommandLineArguments databaseCommandLineArguments = new DatabaseCommandLineArguments();
+        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments);
+    }
+
+    public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments) throws DatabaseException {
+        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments);
     }
 
     @Override

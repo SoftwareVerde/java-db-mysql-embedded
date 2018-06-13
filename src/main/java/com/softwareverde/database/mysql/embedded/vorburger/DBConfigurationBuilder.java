@@ -12,6 +12,10 @@ public class DBConfigurationBuilder {
         return new DBConfigurationBuilder(rawDbConfigurationBuilder);
     }
 
+    public DBConfiguration build() {
+        return new DBConfiguration(_dbConfigurationBuilder.build());
+    }
+
     public void setPort(final int port) {
         _dbConfigurationBuilder.setPort(port);
     }
@@ -24,11 +28,11 @@ public class DBConfigurationBuilder {
         _dbConfigurationBuilder.setSecurityDisabled(securityIsDisabled);
     }
 
-    public DBConfiguration build() {
-        return new DBConfiguration(_dbConfigurationBuilder.build());
-    }
-
     public String getURL(final String databaseName) {
         return _dbConfigurationBuilder.getURL(databaseName);
+    }
+
+    public void addArgument(final String argument) {
+        _dbConfigurationBuilder.addArg(argument);
     }
 }
