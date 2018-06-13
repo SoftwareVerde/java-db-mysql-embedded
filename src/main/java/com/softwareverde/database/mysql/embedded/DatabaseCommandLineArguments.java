@@ -23,7 +23,7 @@ public class DatabaseCommandLineArguments {
     private Long _threadCacheThreadCount;
     private Long _tableOpenCacheTableCount;
     private Long _maxHeapTableByteCount;
-    private Long _queryCacheResultByteCountLimit;
+    private Long _queryCacheMaxResultByteCount;
     private Long _queryCacheByteCount;
     private Long _innoDbBufferPoolByteCount;
     private Long _innoDbLogFileByteCount;
@@ -62,16 +62,16 @@ public class DatabaseCommandLineArguments {
         _threadCacheThreadCount = threadCacheThreadCount;
     }
 
-    public void setTableCache(final Long tableCache) {
-        _tableOpenCacheTableCount = tableCache;
+    public void setTableOpenCacheTableCount(final Long tableOpenCacheTableCount) {
+        _tableOpenCacheTableCount = tableOpenCacheTableCount;
     }
 
     public void setMaxHeapTableByteCount(final Long maxHeapTableByteCount) {
         _maxHeapTableByteCount = maxHeapTableByteCount;
     }
 
-    public void setQueryCacheResultByteCountLimit(final Long queryCacheResultByteCountLimit) {
-        _queryCacheResultByteCountLimit = queryCacheResultByteCountLimit;
+    public void setQueryCacheMaxResultByteCount(final Long queryCacheMaxResultByteCount) {
+        _queryCacheMaxResultByteCount = queryCacheMaxResultByteCount;
     }
 
     public void setQueryCacheByteCount(final Long queryCacheByteCount) {
@@ -95,7 +95,7 @@ public class DatabaseCommandLineArguments {
         _addArgumentIfNotNull(arguments, "--thread_cache_size", _threadCacheThreadCount);
         _addArgumentIfNotNull(arguments, "--table_open_cache", _tableOpenCacheTableCount);
         _addArgumentIfNotNull(arguments, "--max_heap_table_size", _maxHeapTableByteCount);
-        _addArgumentIfNotNull(arguments, "--query_cache_limit", _queryCacheResultByteCountLimit);
+        _addArgumentIfNotNull(arguments, "--query_cache_limit", _queryCacheMaxResultByteCount);
         _addArgumentIfNotNull(arguments, "--query_cache_size", _queryCacheByteCount);
         _addArgumentIfNotNull(arguments, "--innodb_buffer_pool_size", _innoDbBufferPoolByteCount);
         _addArgumentIfNotNull(arguments, "--innodb_log_file_size", _innoDbLogFileByteCount);
