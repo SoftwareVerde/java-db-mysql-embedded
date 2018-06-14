@@ -4,4 +4,4 @@ CREATE TABLE IF NOT EXISTS metadata (
     timestamp bigint unsigned NOT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY metadata_version_uq (version)
-) ENGINE=InnoDB DEFAULT CHARSET=UTF8;
+) ENGINE=InnoDB DEFAULT CHARSET=UTF8MB4;
