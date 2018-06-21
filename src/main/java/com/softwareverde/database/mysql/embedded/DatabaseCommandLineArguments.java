@@ -25,8 +25,10 @@ public class DatabaseCommandLineArguments {
     private Long _maxHeapTableByteCount;
     private Long _queryCacheMaxResultByteCount;
     private Long _queryCacheByteCount;
+    private Integer _innoDbBufferPoolInstanceCount;
     private Long _innoDbBufferPoolByteCount;
     private Long _innoDbLogFileByteCount;
+    private Long _innoDbLogBufferByteCount;
 
     private Boolean _innoDbSlowQueryLogIsEnabled;
     private Long _innoDbSlowQueryLogMinimumQueryTime;
@@ -82,12 +84,20 @@ public class DatabaseCommandLineArguments {
         _queryCacheByteCount = queryCacheByteCount;
     }
 
+    public void setInnoDbBufferPoolInstanceCount(final Integer innoDbBufferPoolInstanceCount) {
+        _innoDbBufferPoolInstanceCount = innoDbBufferPoolInstanceCount;
+    }
+
     public void setInnoDbBufferPoolByteCount(final Long innoDbBufferPoolByteCount) {
         _innoDbBufferPoolByteCount = innoDbBufferPoolByteCount;
     }
 
     public void setInnoDbLogFileByteCount(final Long innoDbLogFileByteCount) {
         _innoDbLogFileByteCount = innoDbLogFileByteCount;
+    }
+
+    public void setInnoDbLogBufferByteCount(final Long innoDbLogBufferByteCount) {
+        _innoDbLogBufferByteCount = innoDbLogBufferByteCount;
     }
 
     public void enableSlowQueryLog(final String logFileName, final Long minimumQueryTime) {
@@ -113,8 +123,10 @@ public class DatabaseCommandLineArguments {
         _addArgumentIfNotNull(arguments, "--max_heap_table_size", _maxHeapTableByteCount);
         _addArgumentIfNotNull(arguments, "--query_cache_limit", _queryCacheMaxResultByteCount);
         _addArgumentIfNotNull(arguments, "--query_cache_size", _queryCacheByteCount);
+        _addArgumentIfNotNull(arguments, "--innodb_buffer_pool_instances", _innoDbBufferPoolInstanceCount);
         _addArgumentIfNotNull(arguments, "--innodb_buffer_pool_size", _innoDbBufferPoolByteCount);
         _addArgumentIfNotNull(arguments, "--innodb_log_file_size", _innoDbLogFileByteCount);
+        _addArgumentIfNotNull(arguments, "--innodb_log_buffer_size", _innoDbLogBufferByteCount);
 
         { // Slow Query Logging...
             if (_innoDbSlowQueryLogIsEnabled != null) {
