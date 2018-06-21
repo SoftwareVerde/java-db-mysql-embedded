@@ -28,6 +28,10 @@ public class DatabaseCommandLineArguments {
     private Long _innoDbBufferPoolByteCount;
     private Long _innoDbLogFileByteCount;
 
+    private Boolean _innoDbSlowQueryLogIsEnabled;
+    private Long _innoDbSlowQueryLogMinimumQueryTime;
+    private String _innoDbSlowQueryLogFileName;
+
     public DatabaseCommandLineArguments() {
         _arguments = new ArrayList<>();
     }
@@ -86,6 +90,18 @@ public class DatabaseCommandLineArguments {
         _innoDbLogFileByteCount = innoDbLogFileByteCount;
     }
 
+    public void enableSlowQueryLog(final String logFileName, final Long minimumQueryTime) {
+        _innoDbSlowQueryLogIsEnabled = true;
+        _innoDbSlowQueryLogFileName = logFileName;
+        _innoDbSlowQueryLogMinimumQueryTime = minimumQueryTime;
+    }
+
+    public void disableSlowQueryLog() {
+        _innoDbSlowQueryLogIsEnabled = null;
+        _innoDbSlowQueryLogFileName = null;
+        _innoDbSlowQueryLogMinimumQueryTime = null;
+    }
+
     public List<String> getArguments() {
         final List<String> arguments = Util.copyList(_arguments);
 
@@ -100,6 +116,14 @@ public class DatabaseCommandLineArguments {
         _addArgumentIfNotNull(arguments, "--innodb_buffer_pool_size", _innoDbBufferPoolByteCount);
         _addArgumentIfNotNull(arguments, "--innodb_log_file_size", _innoDbLogFileByteCount);
 
+        { // Slow Query Logging...
+            if (_innoDbSlowQueryLogIsEnabled != null) {
+                _addKeyValuePairArgument(arguments, "--slow-query-log", (_innoDbSlowQueryLogIsEnabled ? 1 : 0));
+            }
+            _addArgumentIfNotNull(arguments, "--slow-query-log-file", _innoDbSlowQueryLogFileName);
+            _addArgumentIfNotNull(arguments, "--long-query-time", _innoDbSlowQueryLogMinimumQueryTime);
+        }
+
         return arguments;
     }
 
@@ -110,7 +134,7 @@ public class DatabaseCommandLineArguments {
         }
     }
 
-    protected static void _addKeyValuePairArgument(final List<String> arguments, final String key, final String value) {
+    protected static void _addKeyValuePairArgument(final List<String> arguments, final String key, final Object value) {
         final StringBuilder stringBuilder = new StringBuilder();
 
         stringBuilder.append(key);
