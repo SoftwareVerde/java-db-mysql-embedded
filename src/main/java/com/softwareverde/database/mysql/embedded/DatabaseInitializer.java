@@ -3,6 +3,7 @@ package com.softwareverde.database.mysql.embedded;
 import com.softwareverde.database.DatabaseException;
 import com.softwareverde.database.Row;
 import com.softwareverde.database.mysql.MysqlDatabaseConnection;
+import com.softwareverde.database.mysql.MysqlDatabaseConnectionFactory;
 import com.softwareverde.database.mysql.embedded.vorburger.DB;
 import com.softwareverde.util.IoUtil;
 
