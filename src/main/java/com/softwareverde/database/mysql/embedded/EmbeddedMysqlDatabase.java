@@ -12,12 +12,13 @@ import com.softwareverde.database.mysql.embedded.vorburger.DBConfigurationBuilde
 import com.softwareverde.util.HashUtil;
 
 import java.sql.Connection;
+import java.util.Properties;
 
 public class EmbeddedMysqlDatabase implements Database<Connection> {
     protected DB _databaseInstance;
     protected MysqlDatabaseConnectionFactory _databaseConnectionFactory;
 
-    protected void _loadDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments) throws DatabaseException {
+    protected void _loadDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties) throws DatabaseException {
         final String rootHost = "127.0.0.1";
 
         final Credentials defaultRootCredentials;
@@ -52,7 +53,7 @@ public class EmbeddedMysqlDatabase implements Database<Connection> {
             dbConfiguration = configBuilder.build();
 
             final String connectionString = configBuilder.getURL(credentials.schema);
-            databaseConnectionFactory = new MysqlDatabaseConnectionFactory(connectionString, credentials.username, credentials.password);
+            databaseConnectionFactory = new MysqlDatabaseConnectionFactory(connectionString, credentials.username, credentials.password, connectionProperties);
 
             final String defaultCredentialsConnectionString = configBuilder.getURL(""); // NOTE: Should empty string (cannot be null).
             defaultCredentialsDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(defaultCredentialsConnectionString, defaultRootCredentials.username, defaultRootCredentials.password);
@@ -145,16 +146,20 @@ public class EmbeddedMysqlDatabase implements Database<Connection> {
     public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties) throws DatabaseException {
         final DatabaseInitializer databaseInitializer = new DatabaseInitializer();
         final DatabaseCommandLineArguments databaseCommandLineArguments = new DatabaseCommandLineArguments();
-        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments);
+        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, new Properties());
     }
 
     public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer) throws DatabaseException {
         final DatabaseCommandLineArguments databaseCommandLineArguments = new DatabaseCommandLineArguments();
-        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments);
+        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, new Properties());
     }
 
     public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments) throws DatabaseException {
-        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments);
+        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, new Properties());
+    }
+
+    public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties) throws DatabaseException {
+        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, connectionProperties);
     }
 
     @Override
