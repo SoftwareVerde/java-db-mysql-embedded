@@ -156,7 +156,7 @@ public class DatabaseCommandLineArguments {
     }
 
     public List<String> getInstallationArguments() {
-        final List<String> installationArguments = Util.copyList(_arguments);
+        final List<String> installationArguments = Util.copyList(_installationArguments);
 
         _addArgumentIfNotNull(installationArguments, "--innodb_force_recovery", _innoDbForceRecoveryLevel);
 

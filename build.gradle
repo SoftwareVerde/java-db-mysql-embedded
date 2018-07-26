@@ -21,7 +21,7 @@ repositories {
 
 dependencies {
     compile     group: 'com.github.softwareverde',  name: 'java-db-mysql',      version: 'v2.1.6'
-    compile     group: 'com.github.softwareverde',  name: 'mariaDB4j',          version: 'server-configuration-SNAPSHOT'
+    compile     group: 'com.github.softwareverde',  name: 'mariaDB4j',          version: 'ad93aae16eT', force: true
     testCompile group: 'junit',                     name: 'junit',              version: '4.11'
 }
 
