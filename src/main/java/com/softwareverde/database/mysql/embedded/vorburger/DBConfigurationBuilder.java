@@ -35,4 +35,8 @@ public class DBConfigurationBuilder {
     public void addArgument(final String argument) {
         _dbConfigurationBuilder.addArg(argument);
     }
+
+    public void addInstallationArgument(final String installationArgument) {
+        _dbConfigurationBuilder.addInstallArg(installationArgument);
+    }
 }
