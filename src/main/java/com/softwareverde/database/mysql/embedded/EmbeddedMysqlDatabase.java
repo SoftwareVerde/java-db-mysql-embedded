@@ -50,6 +50,9 @@ public class EmbeddedMysqlDatabase implements Database<Connection> {
             for (final String argument : databaseCommandLineArguments.getArguments()) {
                 configBuilder.addArgument(argument);
             }
+            for (final String installationArgument : databaseCommandLineArguments.getInstallationArguments()) {
+                configBuilder.addInstallationArgument(installationArgument);
+            }
             dbConfiguration = configBuilder.build();
 
             final String connectionString = configBuilder.getURL(credentials.schema);

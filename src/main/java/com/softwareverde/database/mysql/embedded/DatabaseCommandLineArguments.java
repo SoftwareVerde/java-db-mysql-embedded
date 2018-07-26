@@ -34,8 +34,12 @@ public class DatabaseCommandLineArguments {
     private Long _innoDbSlowQueryLogMinimumQueryTime;
     private String _innoDbSlowQueryLogFileName;
 
+    private List<String> _installationArguments;
+    private Integer _innoDbForceRecoveryLevel;
+
     public DatabaseCommandLineArguments() {
-        _arguments = new ArrayList<>();
+        _arguments = new ArrayList<String>();
+        _installationArguments = new ArrayList<String>();
     }
 
     /**
@@ -50,6 +54,14 @@ public class DatabaseCommandLineArguments {
      */
     public void addArgument(final String argument) {
         _arguments.add(argument);
+    }
+
+    /**
+     * Allows for adding arbitrary string arguments to the command-line during execution of mysql_install_db.
+     * This functions nearly identically to addArgument(String).
+     */
+    public void addInstallationArgument(final String argument) {
+        _installationArguments.add(argument);
     }
 
     public void setMaxAllowedPacketByteCount(final Long maxAllowedPacketByteCount) {
@@ -100,6 +112,10 @@ public class DatabaseCommandLineArguments {
         _innoDbLogBufferByteCount = innoDbLogBufferByteCount;
     }
 
+    public void setInnoDbForceRecoveryLevel(final Integer innoDbForceRecoveryLevel) {
+        _innoDbForceRecoveryLevel = innoDbForceRecoveryLevel;
+    }
+
     public void enableSlowQueryLog(final String logFileName, final Long minimumQueryTime) {
         _innoDbSlowQueryLogIsEnabled = true;
         _innoDbSlowQueryLogFileName = logFileName;
@@ -137,6 +153,14 @@ public class DatabaseCommandLineArguments {
         }
 
         return arguments;
+    }
+
+    public List<String> getInstallationArguments() {
+        final List<String> installationArguments = Util.copyList(_installationArguments);
+
+        _addArgumentIfNotNull(installationArguments, "--innodb_force_recovery", _innoDbForceRecoveryLevel);
+
+        return installationArguments;
     }
 
     protected static void _addArgumentIfNotNull(final List<String> arguments, final String argumentName, final Object value) {
