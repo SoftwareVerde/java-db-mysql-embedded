@@ -49,11 +49,9 @@ public class EmbeddedMysqlDatabase implements Database<Connection> {
             configBuilder.setSecurityDisabled(false);
             for (final String argument : databaseCommandLineArguments.getArguments()) {
                 configBuilder.addArgument(argument);
-                System.out.println("Applying CommandLine Argument: " + argument);
             }
             for (final String installationArgument : databaseCommandLineArguments.getInstallationArguments()) {
                 configBuilder.addInstallationArgument(installationArgument);
-                System.out.println("Applying Installation Argument: " + installationArgument);
             }
             dbConfiguration = configBuilder.build();
 
