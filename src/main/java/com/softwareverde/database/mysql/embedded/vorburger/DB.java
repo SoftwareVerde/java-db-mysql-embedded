@@ -22,6 +22,17 @@ public class DB {
 
     public void start() throws DatabaseException {
         try {
+            _db.setDBStartMaxWaitInMS(Integer.MAX_VALUE);
+            _db.start();
+        }
+        catch (final ManagedProcessException exception) {
+            throw new DatabaseException(exception);
+        }
+    }
+
+    public void start(final Long maximumWaitTimeInMilliseconds) throws DatabaseException {
+        try {
+            _db.setDBStartMaxWaitInMS((maximumWaitTimeInMilliseconds > Integer.MAX_VALUE ? Integer.MAX_VALUE : maximumWaitTimeInMilliseconds.intValue()));
             _db.start();
         }
         catch (final ManagedProcessException exception) {

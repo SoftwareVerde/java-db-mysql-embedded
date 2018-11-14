@@ -18,7 +18,7 @@ public class EmbeddedMysqlDatabase implements Database<Connection> {
     protected DB _databaseInstance;
     protected MysqlDatabaseConnectionFactory _databaseConnectionFactory;
 
-    protected void _loadDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties) throws DatabaseException {
+    protected void _loadDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties, final Long timeoutMilliseconds) throws DatabaseException {
         final String rootHost = "127.0.0.1";
 
         final Credentials defaultRootCredentials;
@@ -67,7 +67,7 @@ public class EmbeddedMysqlDatabase implements Database<Connection> {
             DB db = null;
             try {
                 db = DB.newEmbeddedDB(dbConfiguration);
-                db.start();
+                db.start(timeoutMilliseconds);
             }
             catch (final Exception exception) {
                 throw new DatabaseException(exception);
@@ -149,20 +149,24 @@ public class EmbeddedMysqlDatabase implements Database<Connection> {
     public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties) throws DatabaseException {
         final DatabaseInitializer databaseInitializer = new DatabaseInitializer();
         final DatabaseCommandLineArguments databaseCommandLineArguments = new DatabaseCommandLineArguments();
-        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, new Properties());
+        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, new Properties(), Long.MAX_VALUE);
     }
 
     public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer) throws DatabaseException {
         final DatabaseCommandLineArguments databaseCommandLineArguments = new DatabaseCommandLineArguments();
-        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, new Properties());
+        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, new Properties(), Long.MAX_VALUE);
     }
 
     public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments) throws DatabaseException {
-        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, new Properties());
+        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, new Properties(), Long.MAX_VALUE);
     }
 
     public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties) throws DatabaseException {
-        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, connectionProperties);
+        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, connectionProperties, Long.MAX_VALUE);
+    }
+
+    public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties, final Long maxStartupTimeoutMilliseconds) throws DatabaseException {
+        _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, connectionProperties, maxStartupTimeoutMilliseconds);
     }
 
     @Override
