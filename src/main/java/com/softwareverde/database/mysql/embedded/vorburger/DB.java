@@ -76,6 +76,10 @@ public class DB {
         }
     }
 
+    public void setPreShutdownHook(final Runnable preShutdownHook) {
+        _db.setPreShutdownHook(preShutdownHook);
+    }
+
     public ch.vorburger.mariadb4j.DB getRawDb() {
         return _db;
     }

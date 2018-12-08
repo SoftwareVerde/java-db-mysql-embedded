@@ -169,6 +169,10 @@ public class EmbeddedMysqlDatabase implements Database<Connection> {
         _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, connectionProperties, maxStartupTimeoutMilliseconds);
     }
 
+    public void setPreShutdownHook(final Runnable runnable) {
+        _databaseInstance.setPreShutdownHook(runnable);
+    }
+
     @Override
     public MysqlDatabaseConnection newConnection() throws DatabaseException {
         return _databaseConnectionFactory.newConnection();
