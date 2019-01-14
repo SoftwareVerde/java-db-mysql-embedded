@@ -1,46 +1,70 @@
 package com.softwareverde.database.mysql.embedded;
 
-import com.softwareverde.database.Database;
+
 import com.softwareverde.database.DatabaseException;
 import com.softwareverde.database.Query;
+import com.softwareverde.database.mysql.DatabaseInitializer;
+import com.softwareverde.database.mysql.MysqlDatabase;
 import com.softwareverde.database.mysql.MysqlDatabaseConnection;
 import com.softwareverde.database.mysql.MysqlDatabaseConnectionFactory;
-import com.softwareverde.database.mysql.embedded.properties.DatabaseProperties;
+import com.softwareverde.database.mysql.embedded.properties.EmbeddedDatabaseProperties;
 import com.softwareverde.database.mysql.embedded.vorburger.DB;
 import com.softwareverde.database.mysql.embedded.vorburger.DBConfiguration;
 import com.softwareverde.database.mysql.embedded.vorburger.DBConfigurationBuilder;
-import com.softwareverde.util.HashUtil;
+import com.softwareverde.database.mysql.properties.Credentials;
 
-import java.sql.Connection;
 import java.util.Properties;
 
-public class EmbeddedMysqlDatabase implements Database<Connection> {
+public class EmbeddedMysqlDatabase extends MysqlDatabase {
     protected DB _databaseInstance;
-    protected MysqlDatabaseConnectionFactory _databaseConnectionFactory;
 
-    protected void _loadDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties, final Long timeoutMilliseconds) throws DatabaseException {
+    protected DB _startDatabaseInstance(final DBConfiguration dbConfiguration, final Long timeoutMilliseconds) throws DatabaseException {
+        try {
+            final DB db = DB.newEmbeddedDB(dbConfiguration);
+            db.start(timeoutMilliseconds);
+            return db;
+        }
+        catch (final Exception exception) {
+            throw new DatabaseException(exception);
+        }
+    }
+
+    protected void _hardenDatabase(final MysqlDatabaseConnection databaseConnection) throws DatabaseException {
+        databaseConnection.executeDdl("DROP DATABASE IF EXISTS `test`");
+    }
+
+    protected void _initializeRootAccount(final MysqlDatabaseConnection databaseConnection, final Credentials rootCredentials) throws DatabaseException {
         final String rootHost = "127.0.0.1";
 
-        final Credentials defaultRootCredentials;
-        final Credentials rootCredentials;
-        final Credentials credentials;
-        final Credentials maintenanceCredentials;
-        {
-            final String databaseSchema = databaseProperties.getSchema();
-            final String rootUsername = "root";
-            final String defaultRootPassword = "";
-            final String newRootPassword = databaseProperties.getRootPassword();
-            final String maintenanceUsername = (databaseSchema + "_maintenance");
-            final String maintenancePassword = HashUtil.sha256(newRootPassword);
+        { // Restrict root to localhost and set root password...
+            databaseConnection.executeSql(
+                new Query("DELETE FROM mysql.user WHERE user != ? OR host != ?")
+                    .setParameter(rootCredentials.username)
+                    .setParameter(rootHost)
+            );
 
-            defaultRootCredentials = new Credentials(rootUsername, defaultRootPassword, databaseSchema);
-            rootCredentials = new Credentials(rootUsername, newRootPassword, databaseSchema);
-            credentials = new Credentials(databaseProperties.getUsername(), databaseProperties.getPassword(), databaseSchema);
-            maintenanceCredentials = new Credentials(maintenanceUsername, maintenancePassword, databaseSchema);
+            databaseConnection.executeSql(new Query("FLUSH PRIVILEGES")); // Oddly necessary...
+
+            databaseConnection.executeSql(
+                new Query("ALTER USER ?@? IDENTIFIED BY ?")
+                    .setParameter(rootCredentials.username)
+                    .setParameter(rootHost)
+                    .setParameter(rootCredentials.password)
+            );
+
+            databaseConnection.executeSql(new Query("FLUSH PRIVILEGES"));
         }
+    }
 
-        final MysqlDatabaseConnectionFactory defaultCredentialsDatabaseConnectionFactory;
-        final MysqlDatabaseConnectionFactory databaseConnectionFactory;
+    protected void _createSchema(final MysqlDatabaseConnection databaseConnection, final String schema) throws DatabaseException {
+        databaseConnection.executeDdl("CREATE DATABASE IF NOT EXISTS `" + schema + "`");
+    }
+
+    protected void _loadDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties, final Long timeoutMilliseconds) throws DatabaseException {
+        final Credentials defaultRootCredentials = new Credentials("root", "");
+        final Credentials rootCredentials = new Credentials("root", databaseProperties.getRootPassword());
+        // final Credentials credentials = new Credentials(databaseProperties.getUsername(), databaseProperties.getPassword());;
+
         final DBConfiguration dbConfiguration;
         {
             final DBConfigurationBuilder configBuilder = DBConfigurationBuilder.newBuilder();
@@ -54,131 +78,59 @@ public class EmbeddedMysqlDatabase implements Database<Connection> {
                 configBuilder.addInstallationArgument(installationArgument);
             }
             dbConfiguration = configBuilder.build();
-
-            final String connectionString = configBuilder.getURL(credentials.schema);
-            databaseConnectionFactory = new MysqlDatabaseConnectionFactory(connectionString, credentials.username, credentials.password, connectionProperties);
-
-            final String defaultCredentialsConnectionString = configBuilder.getURL(""); // NOTE: Should empty string (cannot be null).
-            defaultCredentialsDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(defaultCredentialsConnectionString, defaultRootCredentials.username, defaultRootCredentials.password);
         }
 
-        final DB databaseInstance;
-        {
-            DB db = null;
-            try {
-                db = DB.newEmbeddedDB(dbConfiguration);
-                db.start(timeoutMilliseconds);
-            }
-            catch (final Exception exception) {
-                throw new DatabaseException(exception);
-            }
-            databaseInstance = db;
+        final DB databaseInstance = _startDatabaseInstance(dbConfiguration, timeoutMilliseconds);
+
+        // Set the root account credentials, setup maintenance account, and harden the database...
+        final MysqlDatabaseConnectionFactory rootDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(databaseProperties.getHostname(), databaseProperties.getPort(), "", defaultRootCredentials.username, defaultRootCredentials.password, connectionProperties);
+        try (final MysqlDatabaseConnection rootDatabaseConnection = rootDatabaseConnectionFactory.newConnection()) {
+            _initializeRootAccount(rootDatabaseConnection, rootCredentials);
+            _createSchema(rootDatabaseConnection, databaseProperties.getSchema());
+            databaseInitializer.initializeSchema(rootDatabaseConnection, databaseProperties);
+            _hardenDatabase(rootDatabaseConnection);
         }
 
-        { // Check for default username/password...
-            Boolean databaseIsConfigured = false;
-            DatabaseException databaseConfigurationFailureReason = null;
-            try (final MysqlDatabaseConnection databaseConnection = defaultCredentialsDatabaseConnectionFactory.newConnection()) {
-                try {
-                    databaseConnection.executeDdl("DROP DATABASE IF EXISTS `test`");
-                    databaseConnection.executeDdl("CREATE DATABASE IF NOT EXISTS `"+ credentials.schema +"`");
+        final Credentials maintenanceCredentials = databaseInitializer.getMaintenanceCredentials(databaseProperties);
 
-                    { // Restrict root to localhost and set root password...
-                        databaseConnection.executeSql(
-                            new Query("DELETE FROM mysql.user WHERE user != ? OR host != ?")
-                                .setParameter(defaultRootCredentials.username)
-                                .setParameter(rootHost)
-                        );
-                        databaseConnection.executeSql(
-                            new Query("ALTER USER ?@? IDENTIFIED BY ?")
-                                .setParameter(rootCredentials.username)
-                                .setParameter(rootHost)
-                                .setParameter(rootCredentials.password)
-                        );
-                    }
-
-                    { // Create maintenance user and permissions...
-                        databaseConnection.executeSql(
-                            new Query("CREATE USER ? IDENTIFIED BY ?")
-                                .setParameter(maintenanceCredentials.username)
-                                .setParameter(maintenanceCredentials.password)
-                        );
-                        databaseConnection.executeSql(
-                            new Query("GRANT ALL PRIVILEGES ON `" + maintenanceCredentials.schema + "`.* TO ? IDENTIFIED BY ?")
-                                .setParameter(maintenanceCredentials.username)
-                                .setParameter(maintenanceCredentials.password)
-                        );
-                    }
-
-                    { // Create regular user and permissions...
-                        databaseConnection.executeSql(
-                            new Query("CREATE USER ? IDENTIFIED BY ?")
-                                .setParameter(credentials.username)
-                                .setParameter(credentials.password)
-                        );
-                        databaseConnection.executeSql(
-                            new Query("GRANT SELECT, INSERT, DELETE, UPDATE, EXECUTE ON `" + credentials.schema + "`.* TO ? IDENTIFIED BY ?")
-                                .setParameter(credentials.username)
-                                .setParameter(credentials.password)
-                        );
-                    }
-
-                    databaseConnection.executeSql("FLUSH PRIVILEGES", null);
-                    databaseIsConfigured = true;
-                }
-                catch (final Exception exception) {
-                    databaseIsConfigured = false;
-                    databaseConfigurationFailureReason = new DatabaseException(exception);
-                }
-            }
-            catch (final DatabaseException exception) {
-                databaseIsConfigured = true;
-            }
-
-            if (! databaseIsConfigured) {
-                throw databaseConfigurationFailureReason;
-            }
+        // Switch over to the maintenance account for the database initialization...
+        final MysqlDatabaseConnectionFactory maintenanceCredentialsDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(databaseProperties, maintenanceCredentials, connectionProperties);
+        try (final MysqlDatabaseConnection maintenanceDatabaseConnection = maintenanceCredentialsDatabaseConnectionFactory.newConnection()) {
+            databaseInitializer.initializeDatabase(maintenanceDatabaseConnection);
         }
-
-        databaseInitializer.initializeDatabase(databaseInstance, databaseConnectionFactory, maintenanceCredentials);
 
         _databaseInstance = databaseInstance;
-        _databaseConnectionFactory = databaseConnectionFactory;
     }
 
-    public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties) throws DatabaseException {
+    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties) throws DatabaseException {
+        super(databaseProperties);
         final DatabaseInitializer databaseInitializer = new DatabaseInitializer();
         final DatabaseCommandLineArguments databaseCommandLineArguments = new DatabaseCommandLineArguments();
         _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, new Properties(), Long.MAX_VALUE);
     }
 
-    public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer) throws DatabaseException {
+    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer) throws DatabaseException {
+        super(databaseProperties);
         final DatabaseCommandLineArguments databaseCommandLineArguments = new DatabaseCommandLineArguments();
         _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, new Properties(), Long.MAX_VALUE);
     }
 
-    public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments) throws DatabaseException {
+    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments) throws DatabaseException {
+        super(databaseProperties);
         _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, new Properties(), Long.MAX_VALUE);
     }
 
-    public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties) throws DatabaseException {
+    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties) throws DatabaseException {
+        super(databaseProperties);
         _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, connectionProperties, Long.MAX_VALUE);
     }
 
-    public EmbeddedMysqlDatabase(final DatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties, final Long maxStartupTimeoutMilliseconds) throws DatabaseException {
+    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties, final Long maxStartupTimeoutMilliseconds) throws DatabaseException {
+        super(databaseProperties);
         _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, connectionProperties, maxStartupTimeoutMilliseconds);
     }
 
     public void setPreShutdownHook(final Runnable runnable) {
         _databaseInstance.setPreShutdownHook(runnable);
-    }
-
-    @Override
-    public MysqlDatabaseConnection newConnection() throws DatabaseException {
-        return _databaseConnectionFactory.newConnection();
-    }
-
-    public MysqlDatabaseConnectionFactory getDatabaseConnectionFactory() {
-        return _databaseConnectionFactory;
     }
 }

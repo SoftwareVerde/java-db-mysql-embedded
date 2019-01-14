@@ -12,6 +12,10 @@ public class DBConfigurationBuilder {
         return new DBConfigurationBuilder(rawDbConfigurationBuilder);
     }
 
+    public Integer getPort() {
+        return _dbConfigurationBuilder.getPort();
+    }
+
     public DBConfiguration build() {
         return new DBConfiguration(_dbConfigurationBuilder.build());
     }
