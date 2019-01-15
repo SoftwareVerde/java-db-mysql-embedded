@@ -82,14 +82,29 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
 
         final DB databaseInstance = _startDatabaseInstance(dbConfiguration, timeoutMilliseconds);
 
+        DatabaseException setupException = null;
         // Set the root account credentials, setup maintenance account, and harden the database...
         final MysqlDatabaseConnectionFactory rootDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(databaseProperties.getHostname(), databaseProperties.getPort(), "", defaultRootCredentials.username, defaultRootCredentials.password, connectionProperties);
         try (final MysqlDatabaseConnection rootDatabaseConnection = rootDatabaseConnectionFactory.newConnection()) {
-            _initializeRootAccount(rootDatabaseConnection, rootCredentials);
-            _createSchema(rootDatabaseConnection, databaseProperties.getSchema());
-            databaseInitializer.initializeSchema(rootDatabaseConnection, databaseProperties);
-            _hardenDatabase(rootDatabaseConnection);
+            try {
+                final Integer databaseVersionNumber = databaseInitializer.getDatabaseVersionNumber(rootDatabaseConnection);
+                if (databaseVersionNumber == 0) {
+                    _initializeRootAccount(rootDatabaseConnection, rootCredentials);
+                    _createSchema(rootDatabaseConnection, databaseProperties.getSchema());
+                    databaseInitializer.initializeSchema(rootDatabaseConnection, databaseProperties);
+                    _hardenDatabase(rootDatabaseConnection);
+                }
+            }
+            catch (final DatabaseException databaseException) {
+                // The setup failed, which should cause the initialization to fail..
+                setupException = databaseException;
+            }
         }
+        catch (final DatabaseException exception) {
+            // The default root credentials failed, which is likely because the database has already been configured...
+        }
+
+        if (setupException != null) { throw setupException; }
 
         final Credentials maintenanceCredentials = databaseInitializer.getMaintenanceCredentials(databaseProperties);
 
