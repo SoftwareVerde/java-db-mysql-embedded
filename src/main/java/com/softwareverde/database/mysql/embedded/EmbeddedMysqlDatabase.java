@@ -2,21 +2,24 @@ package com.softwareverde.database.mysql.embedded;
 
 
 import com.softwareverde.database.DatabaseException;
-import com.softwareverde.database.Query;
-import com.softwareverde.database.mysql.DatabaseInitializer;
+import com.softwareverde.database.DatabaseInitializer;
 import com.softwareverde.database.mysql.MysqlDatabase;
 import com.softwareverde.database.mysql.MysqlDatabaseConnection;
 import com.softwareverde.database.mysql.MysqlDatabaseConnectionFactory;
+import com.softwareverde.database.mysql.MysqlDatabaseInitializer;
 import com.softwareverde.database.mysql.embedded.properties.EmbeddedDatabaseProperties;
 import com.softwareverde.database.mysql.embedded.vorburger.DB;
 import com.softwareverde.database.mysql.embedded.vorburger.DBConfiguration;
-import com.softwareverde.database.mysql.embedded.vorburger.DBConfigurationBuilder;
-import com.softwareverde.database.mysql.properties.Credentials;
+import com.softwareverde.database.mysql.embedded.vorburger.DatabaseConfigurationBuilder;
+import com.softwareverde.database.properties.DatabaseCredentials;
+import com.softwareverde.database.query.Query;
 
+import java.sql.Connection;
 import java.util.Properties;
 
 public class EmbeddedMysqlDatabase extends MysqlDatabase {
     protected DB _databaseInstance;
+    protected Runnable _onShutdownCallback = null;
 
     protected DB _startDatabaseInstance(final DBConfiguration dbConfiguration, final Long timeoutMilliseconds) throws DatabaseException {
         try {
@@ -33,7 +36,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
         databaseConnection.executeDdl("DROP DATABASE IF EXISTS `test`");
     }
 
-    protected void _initializeRootAccount(final MysqlDatabaseConnection databaseConnection, final Credentials rootCredentials) throws DatabaseException {
+    protected void _initializeRootAccount(final MysqlDatabaseConnection databaseConnection, final DatabaseCredentials rootCredentials) throws DatabaseException {
         final String rootHost = "127.0.0.1";
 
         { // Restrict root to localhost and set root password...
@@ -60,23 +63,36 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
         databaseConnection.executeDdl("CREATE DATABASE IF NOT EXISTS `" + schema + "`");
     }
 
-    protected void _loadDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties, final Long timeoutMilliseconds) throws DatabaseException {
-        final Credentials defaultRootCredentials = new Credentials("root", "");
-        final Credentials rootCredentials = new Credentials("root", databaseProperties.getRootPassword());
+    protected void _loadDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties, final Long timeoutMilliseconds) throws DatabaseException {
+        final DatabaseCredentials defaultRootCredentials = new DatabaseCredentials("root", "");
+        final DatabaseCredentials rootCredentials = new DatabaseCredentials("root", databaseProperties.getRootPassword());
         // final Credentials credentials = new Credentials(databaseProperties.getUsername(), databaseProperties.getPassword());;
 
         final DBConfiguration dbConfiguration;
         {
-            final DBConfigurationBuilder configBuilder = DBConfigurationBuilder.newBuilder();
+            final DatabaseConfigurationBuilder configBuilder = DatabaseConfigurationBuilder.newBuilder();
             configBuilder.setPort(databaseProperties.getPort());
             configBuilder.setDataDir(databaseProperties.getDataDirectory());
             configBuilder.setSecurityDisabled(false);
+
             for (final String argument : databaseCommandLineArguments.getArguments()) {
                 configBuilder.addArgument(argument);
             }
+
             for (final String installationArgument : databaseCommandLineArguments.getInstallationArguments()) {
                 configBuilder.addInstallationArgument(installationArgument);
             }
+
+            configBuilder.setShutdownHook(new Runnable() {
+                @Override
+                public void run() {
+                    final Runnable onShutdownCallback = _onShutdownCallback;
+                    if (onShutdownCallback != null) {
+                        onShutdownCallback.run();
+                    }
+                }
+            });
+
             dbConfiguration = configBuilder.build();
         }
 
@@ -106,7 +122,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
 
         if (setupException != null) { throw setupException; }
 
-        final Credentials maintenanceCredentials = databaseInitializer.getMaintenanceCredentials(databaseProperties);
+        final DatabaseCredentials maintenanceCredentials = databaseInitializer.getMaintenanceCredentials(databaseProperties);
 
         // Switch over to the maintenance account for the database initialization...
         final MysqlDatabaseConnectionFactory maintenanceCredentialsDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(databaseProperties, maintenanceCredentials, connectionProperties);
@@ -119,33 +135,33 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
 
     public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties) throws DatabaseException {
         super(databaseProperties);
-        final DatabaseInitializer databaseInitializer = new DatabaseInitializer();
+        final MysqlDatabaseInitializer databaseInitializer = new MysqlDatabaseInitializer();
         final DatabaseCommandLineArguments databaseCommandLineArguments = new DatabaseCommandLineArguments();
         _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, new Properties(), Long.MAX_VALUE);
     }
 
-    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer) throws DatabaseException {
+    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer) throws DatabaseException {
         super(databaseProperties);
         final DatabaseCommandLineArguments databaseCommandLineArguments = new DatabaseCommandLineArguments();
         _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, new Properties(), Long.MAX_VALUE);
     }
 
-    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments) throws DatabaseException {
+    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments) throws DatabaseException {
         super(databaseProperties);
         _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, new Properties(), Long.MAX_VALUE);
     }
 
-    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties) throws DatabaseException {
+    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties) throws DatabaseException {
         super(databaseProperties);
         _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, connectionProperties, Long.MAX_VALUE);
     }
 
-    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties, final Long maxStartupTimeoutMilliseconds) throws DatabaseException {
+    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer, final DatabaseCommandLineArguments databaseCommandLineArguments, final Properties connectionProperties, final Long maxStartupTimeoutMilliseconds) throws DatabaseException {
         super(databaseProperties);
         _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, connectionProperties, maxStartupTimeoutMilliseconds);
     }
 
-    public void setPreShutdownHook(final Runnable runnable) {
-        _databaseInstance.setPreShutdownHook(runnable);
+    public void setOnShutdownCallback(final Runnable onShutdownCallback) {
+        _onShutdownCallback = onShutdownCallback;
     }
 }

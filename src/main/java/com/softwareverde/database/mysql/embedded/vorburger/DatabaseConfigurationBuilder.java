@@ -1,15 +1,17 @@
 package com.softwareverde.database.mysql.embedded.vorburger;
 
-public class DBConfigurationBuilder {
+import ch.vorburger.exec.ManagedProcessListener;
+
+public class DatabaseConfigurationBuilder {
     protected final ch.vorburger.mariadb4j.DBConfigurationBuilder _dbConfigurationBuilder;
 
-    protected DBConfigurationBuilder(final ch.vorburger.mariadb4j.DBConfigurationBuilder dbConfigurationBuilder) {
+    protected DatabaseConfigurationBuilder(final ch.vorburger.mariadb4j.DBConfigurationBuilder dbConfigurationBuilder) {
         _dbConfigurationBuilder = dbConfigurationBuilder;
     }
 
-    public static DBConfigurationBuilder newBuilder() {
+    public static DatabaseConfigurationBuilder newBuilder() {
         final ch.vorburger.mariadb4j.DBConfigurationBuilder rawDbConfigurationBuilder = ch.vorburger.mariadb4j.DBConfigurationBuilder.newBuilder();
-        return new DBConfigurationBuilder(rawDbConfigurationBuilder);
+        return new DatabaseConfigurationBuilder(rawDbConfigurationBuilder);
     }
 
     public Integer getPort() {
@@ -42,5 +44,23 @@ public class DBConfigurationBuilder {
 
     public void addInstallationArgument(final String installationArgument) {
         _dbConfigurationBuilder.addInstallArg(installationArgument);
+    }
+
+    public void setShutdownHook(final Runnable shutdownHook) {
+        _dbConfigurationBuilder.setProcessListener(new ManagedProcessListener() {
+            @Override
+            public void onProcessComplete(final int exitValue) {
+                if (shutdownHook != null) {
+                    shutdownHook.run();
+                }
+            }
+
+            @Override
+            public void onProcessFailed(final int exitValue, final Throwable throwable) {
+                if (shutdownHook != null) {
+                    shutdownHook.run();
+                }
+            }
+        });
     }
 }

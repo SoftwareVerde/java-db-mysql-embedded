@@ -1,6 +1,6 @@
 package com.softwareverde.database.mysql.embedded.properties;
 
-import com.softwareverde.database.mysql.properties.MutableDatabaseProperties;
+import com.softwareverde.database.properties.MutableDatabaseProperties;
 
 public class MutableEmbeddedDatabaseProperties extends MutableDatabaseProperties implements EmbeddedDatabaseProperties {
     protected String _dataDirectory;
@@ -20,7 +20,4 @@ public class MutableEmbeddedDatabaseProperties extends MutableDatabaseProperties
     public String getDataDirectory() {
         return _dataDirectory;
     }
-
-    @Override
-    public ImmutableEmbeddedDatabaseProperties asConst() { return new ImmutableEmbeddedDatabaseProperties(this); }
 }
