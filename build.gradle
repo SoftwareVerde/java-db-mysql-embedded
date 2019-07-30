@@ -2,6 +2,7 @@ group 'com.softwareverde'
 version '2.0.0'
 
 apply plugin: 'java'
+apply plugin: 'java-library'
 
 sourceCompatibility = 1.8
 
@@ -20,8 +21,9 @@ repositories {
 }
 
 dependencies {
-    compile     group: 'com.github.softwareverde',  name: 'java-db-mysql',      version: '072f6086ca'
-    compile     group: 'com.github.softwareverde',  name: 'mariaDB4j',          version: '032b71e'
+    api             group: 'com.github.softwareverde',  name: 'java-db-mysql',      version: '781ce25'
+    implementation  group: 'com.github.softwareverde',  name: 'mariaDB4j',          version: '032b71e'
+
     testCompile group: 'junit',                     name: 'junit',              version: '4.11'
 }
 

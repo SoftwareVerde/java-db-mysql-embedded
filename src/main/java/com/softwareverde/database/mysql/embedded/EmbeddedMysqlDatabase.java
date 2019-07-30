@@ -161,7 +161,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
         _loadDatabase(databaseProperties, databaseInitializer, databaseCommandLineArguments, connectionProperties, maxStartupTimeoutMilliseconds);
     }
 
-    public void setOnShutdownCallback(final Runnable onShutdownCallback) {
+    public void setShutdownCallback(final Runnable onShutdownCallback) {
         _onShutdownCallback = onShutdownCallback;
     }
 }
