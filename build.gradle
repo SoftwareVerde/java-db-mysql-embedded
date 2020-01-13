@@ -1,5 +1,5 @@
 group 'com.softwareverde'
-version '2.0.1'
+version '2.0.2'
 
 apply plugin: 'java'
 apply plugin: 'java-library'
@@ -21,11 +21,11 @@ repositories {
 }
 
 dependencies {
-    api                 group: 'com.github.softwareverde',  name: 'java-db-mysql',      version: 'v4.0.1'
+    api                 group: 'com.github.softwareverde',  name: 'java-db-mysql',      version: 'v4.0.4'
     api                 group: 'com.github.softwareverde',  name: 'mariaDB4j',          version: 'v1.0.5'
-    implementation      group: 'com.github.softwareverde',  name: 'java-util',          version: 'v2.0.0'
+    implementation      group: 'com.github.softwareverde',  name: 'java-util',          version: 'v2.0.6'
 
-    testImplementation  group: 'junit',                     name: 'junit',              version: '4.11'
+    testImplementation  group: 'junit',                     name: 'junit',              version: '4.12'
 }
 
 tasks.withType(Test) {
