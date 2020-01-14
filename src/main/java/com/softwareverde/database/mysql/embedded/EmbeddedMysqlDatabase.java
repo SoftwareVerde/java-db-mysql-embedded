@@ -1,6 +1,5 @@
 package com.softwareverde.database.mysql.embedded;
 
-
 import com.softwareverde.database.DatabaseException;
 import com.softwareverde.database.DatabaseInitializer;
 import com.softwareverde.database.mysql.MysqlDatabase;
