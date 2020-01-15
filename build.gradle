@@ -1,5 +1,5 @@
 group 'com.softwareverde'
-version '2.1.1'
+version '2.1.2'
 
 apply plugin: 'java'
 apply plugin: 'java-library'
@@ -38,6 +38,8 @@ dependencies {
         // exclude group: 'commons-io',                module: '*'
         // exclude group: 'org.apache.commons',        module: '*'
     }
+    api group: 'org.slf4j',                 name: 'slf4j-api',          version: '1.7.30'
+
     implementation      group: 'com.github.softwareverde',  name: 'java-util',          version: 'v2.0.6'
 
     testImplementation  group: 'junit',                     name: 'junit',              version: '4.12'
