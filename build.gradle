@@ -1,5 +1,5 @@
 group 'com.softwareverde'
-version '2.1.2'
+version '2.1.3'
 
 apply plugin: 'java'
 apply plugin: 'java-library'
@@ -21,8 +21,8 @@ repositories {
 }
 
 dependencies {
-    api group: 'com.github.softwareverde',  name: 'java-db-mysql',      version: 'v4.0.5'
-    api (group: 'com.github.softwareverde', name: 'mariaDB4j',          version: 'v1.0.5') {
+    api                 group: 'com.github.softwareverde',  name: 'java-db-mysql',      version: 'v4.0.6'
+    api                 (group: 'com.github.softwareverde', name: 'mariaDB4j',          version: 'v1.0.5') {
         exclude group: 'org.apache.logging.log4j',              module: '*'
         exclude group: 'ch.qos.logback',                        module: '*'
         exclude group: 'org.springframework.boot',              module: '*'
@@ -33,14 +33,14 @@ dependencies {
         exclude group: 'org.hamcrest',                          module: '*'
         exclude group: 'org.slf4j',                             module: '*'
         exclude group: 'com.github.softwareverde.mariaDB4j',    module: 'mariaDB4j-maven-plugin'
-        // -- tried to remove these but they appear to be required
+
         // exclude group: 'org.springframework',       module: '*'
         // exclude group: 'commons-io',                module: '*'
         // exclude group: 'org.apache.commons',        module: '*'
     }
-    api group: 'org.slf4j',                 name: 'slf4j-api',          version: '1.7.30'
 
-    implementation      group: 'com.github.softwareverde',  name: 'java-util',          version: 'v2.0.6'
+    implementation      group: 'org.slf4j',                 name: 'slf4j-api',          version: '1.7.30'
+    implementation      group: 'com.github.softwareverde',  name: 'java-util',          version: 'v2.1.0'
 
     testImplementation  group: 'junit',                     name: 'junit',              version: '4.12'
 }
