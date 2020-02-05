@@ -33,10 +33,10 @@ dependencies {
         exclude group: 'org.hamcrest',                          module: '*'
         exclude group: 'org.slf4j',                             module: '*'
         exclude group: 'com.github.softwareverde.mariaDB4j',    module: 'mariaDB4j-maven-plugin'
+        exclude group: 'commons-io',                            module: '*'
 
-        // exclude group: 'org.springframework',       module: '*'
-        // exclude group: 'commons-io',                module: '*'
-        // exclude group: 'org.apache.commons',        module: '*'
+        // exclude group: 'org.springframework',                   module: '*'
+        // exclude group: 'org.apache.commons',                    module: '*'
     }
 
     implementation      group: 'org.slf4j',                 name: 'slf4j-api',          version: '1.7.30'
