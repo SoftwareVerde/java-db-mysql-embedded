@@ -1,5 +1,5 @@
 group 'com.softwareverde'
-version '2.1.4'
+version '2.1.5'
 
 apply plugin: 'java'
 apply plugin: 'java-library'
@@ -21,7 +21,7 @@ repositories {
 }
 
 dependencies {
-    api                 group: 'com.github.softwareverde',  name: 'java-db-mysql',      version: 'v4.0.7'
+    api                 group: 'com.github.softwareverde',  name: 'java-db-mysql',      version: 'v4.0.8'
     api                 (group: 'com.github.softwareverde', name: 'mariaDB4j',          version: 'v1.0.5') {
         exclude group: 'org.apache.logging.log4j',              module: '*'
         exclude group: 'ch.qos.logback',                        module: '*'
