@@ -1,0 +1,62 @@
+plugins {
+    id 'java'
+}
+
+group 'com.softwareverde'
+version '0.1.0'
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    // implementation  fileTree(dir: 'libs', include: ['*.jar'])
+
+    implementation  group: 'com.github.softwareverde',  name: 'java-util',              version: 'v2.6.1'
+    implementation  group: 'com.github.softwareverde',  name: 'java-logging',           version: 'v2.2.0'
+    implementation  group: 'com.github.softwareverde',  name: 'java-db',                version: 'v3.2.5'
+    implementation  group: 'com.github.softwareverde',  name: 'java-db',                version: 'v3.2.5'
+
+    testImplementation 'junit:junit:4.12'
+}
+
+sourceSets {
+    main {
+        java
+        resources
+    }
+    test {
+        java
+        resources
+
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+task copyDependencies(type: Copy) {
+    from (configurations.compileClasspath + configurations.runtimeClasspath)
+    into "$buildDir/libs/libs"
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+task makeJar(type: Jar) {
+    manifest {
+        attributes  'Implementation-Title': 'MariaDb',
+                'Implementation-Version': archiveVersion,
+                'Main-Class': 'com.softwareverde.database.Main',
+                'Class-Path': (project.configurations.compileClasspath + configurations.runtimeClasspath).collect { 'libs/' + it.getName() }.join(' ')
+    }
+
+    archiveBaseName = project.name
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from sourceSets.main.output
+
+    with jar
+}
