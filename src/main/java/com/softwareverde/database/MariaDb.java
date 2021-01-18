@@ -2,7 +2,6 @@ package com.softwareverde.database;
 
 import com.softwareverde.logging.Logger;
 import com.softwareverde.util.IoUtil;
-import com.softwareverde.util.SystemUtil;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -18,45 +17,11 @@ import java.nio.file.StandardCopyOption;
 import java.util.concurrent.TimeUnit;
 
 public class MariaDb {
-    public enum OperatingSystemType {
-        LINUX("linux"),
-        MAC_OSX("osx"),
-        WINDOWS("windows");
-
-        protected final String _value;
-
-        OperatingSystemType(final String value) {
-            _value = value;
-        }
-
-        @Override
-        public String toString() {
-            return _value;
-        }
-
-        public static OperatingSystemType getOperatingSystemType() {
-            if (SystemUtil.isWindowsOperatingSystem()) {
-                return WINDOWS;
-            }
-
-            if (SystemUtil.isMacOperatingSystem()) {
-                return MAC_OSX;
-            }
-
-            if (SystemUtil.isLinuxOperatingSystem()) {
-                return LINUX;
-            }
-
-            return null;
-        }
-    }
-
     protected static File copyFile(final InputStream sourceStream, final String destinationFilename) {
         try {
             final Path destinationPath = Paths.get(destinationFilename);
             final File file = new File(destinationFilename);
-            final boolean directoryWasCreatedSuccessfully = file.mkdirs();
-            if (! directoryWasCreatedSuccessfully) { return null; }
+            file.mkdirs();
 
             Files.copy(sourceStream, destinationPath, StandardCopyOption.REPLACE_EXISTING);
             return file;
@@ -67,11 +32,22 @@ public class MariaDb {
         }
     }
 
+    protected final String _configurationFileName = "mysql.conf";
     protected final OperatingSystemType _operatingSystemType;
     protected final File _installDirectory;
     protected final File _dataDirectory;
 
     protected Process _process;
+    protected MysqlDatabaseConfiguration _databaseConfiguration;
+
+    protected void _writeConfigFile() {
+        _dataDirectory.mkdirs();
+        final String configFileContents = (_databaseConfiguration != null ? _databaseConfiguration.getDefaultsFile() : "");
+        final String configFileLocation = (_dataDirectory.getPath() + "/" + _configurationFileName);
+
+        Logger.debug("Writing config file to: " + configFileLocation);
+        IoUtil.putFileContents(configFileLocation, configFileContents.getBytes(StandardCharsets.UTF_8));
+    }
 
     public MariaDb(final OperatingSystemType operatingSystemType, final File installDirectory, final File dataDirectory) {
         _operatingSystemType = operatingSystemType;
@@ -79,7 +55,15 @@ public class MariaDb {
         _dataDirectory = dataDirectory;
     }
 
+    public void setDatabaseConfiguration(final MysqlDatabaseConfiguration databaseConfiguration) {
+        _databaseConfiguration = databaseConfiguration;
+
+        _writeConfigFile();
+    }
+
     public void install(final String rootPassword) throws Exception {
+        _writeConfigFile();
+
         final String resourcePrefix = "/mysql/" + _operatingSystemType + "/";
         final String manifest = IoUtil.getResource(resourcePrefix + "manifest");
         for (final String manifestEntry : manifest.split("\n")) {
@@ -115,10 +99,7 @@ public class MariaDb {
             }
         }
 
-        final boolean makeDataDirectoryWasSuccessful = _dataDirectory.mkdirs();
-        if (! makeDataDirectoryWasSuccessful) {
-            throw new RuntimeException("Unable to create data directory: " + _dataDirectory.getAbsolutePath());
-        }
+        _dataDirectory.mkdirs();
 
         final String command;
         {
@@ -175,6 +156,8 @@ public class MariaDb {
     }
 
     public void start() throws Exception {
+        _writeConfigFile();
+
         final String command;
         {
             final File file = new File(_installDirectory.getPath() + "/run.sh");

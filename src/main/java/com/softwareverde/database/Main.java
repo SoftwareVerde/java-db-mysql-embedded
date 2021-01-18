@@ -11,10 +11,23 @@ public class Main {
         Logger.setLog(LineNumberAnnotatedLog.getInstance());
         Logger.setLogLevel(LogLevel.ON);
 
+        if (parameters.length < 3) {
+            System.err.println("Usage: <dataDirectory> <installationDirectory> <mysqlRootPassword>");
+            System.exit(1);
+        }
+
+        final MysqlDatabaseConfiguration databaseConfiguration = new MysqlDatabaseConfiguration();
+        databaseConfiguration.setPort(MysqlDatabaseConfiguration.DEFAULT_PORT);
+
         try {
-            final File installationDirectory = new File("db");
-            final MariaDb mariaDb = new MariaDb(MariaDb.OperatingSystemType.getOperatingSystemType(), installationDirectory, new File("data"));
-            mariaDb.install("password");
+            final OperatingSystemType operatingSystemType = OperatingSystemType.getOperatingSystemType();
+            final File installationDirectory = new File(parameters[0]);
+            final File dataDirectory = new File(parameters[1]);
+            final String mysqlRootPassword = parameters[2];
+
+            final MariaDb mariaDb = new MariaDb(operatingSystemType, installationDirectory, dataDirectory);
+            mariaDb.setDatabaseConfiguration(databaseConfiguration);
+            mariaDb.install(mysqlRootPassword);
             mariaDb.start();
 
             final Thread thread = Thread.currentThread();
