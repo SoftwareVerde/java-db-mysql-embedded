@@ -1,16 +1,16 @@
 package com.softwareverde.database;
 
 import com.softwareverde.database.mysql.MysqlDatabase;
+import com.softwareverde.database.mysql.MysqlDatabaseInitializer;
 import com.softwareverde.database.mysql.embedded.EmbeddedMysqlDatabase;
-import com.softwareverde.database.mysql.embedded.OperatingSystemType;
 import com.softwareverde.database.mysql.embedded.MysqlDatabaseConfiguration;
 import com.softwareverde.database.mysql.embedded.properties.MutableEmbeddedDatabaseProperties;
-import com.softwareverde.database.properties.DatabaseProperties;
 import com.softwareverde.logging.LineNumberAnnotatedLog;
 import com.softwareverde.logging.LogLevel;
 import com.softwareverde.logging.Logger;
 
 import java.io.File;
+import java.sql.Connection;
 
 public class Main {
     public static void main(final String[] parameters) {
@@ -18,7 +18,7 @@ public class Main {
         Logger.setLogLevel(LogLevel.ON);
 
         if (parameters.length < 3) {
-            System.err.println("Usage: <dataDirectory> <installationDirectory> <mysqlRootPassword>");
+            System.err.println("Usage: <installationDirectory> <dataDirectory> <mysqlRootPassword>");
             System.exit(1);
         }
 
@@ -39,8 +39,15 @@ public class Main {
         final MysqlDatabaseConfiguration databaseConfiguration = new MysqlDatabaseConfiguration();
         databaseConfiguration.setPort(MysqlDatabaseConfiguration.DEFAULT_PORT);
 
+        final DatabaseInitializer<Connection> databaseInitializer = new MysqlDatabaseInitializer(null, 0, new DatabaseInitializer.DatabaseUpgradeHandler<Connection>() {
+            @Override
+            public Boolean onUpgrade(final DatabaseConnection<Connection> maintenanceDatabaseConnection, final Integer previousVersion, final Integer requiredVersion) {
+                throw new RuntimeException("Database upgrade not supported.");
+            }
+        });
+
         try {
-            final EmbeddedMysqlDatabase embeddedMysqlDatabase = new EmbeddedMysqlDatabase(databaseProperties, databaseConfiguration);
+            final EmbeddedMysqlDatabase embeddedMysqlDatabase = new EmbeddedMysqlDatabase(databaseProperties, databaseInitializer, databaseConfiguration);
             embeddedMysqlDatabase.install();
             embeddedMysqlDatabase.start();
 
