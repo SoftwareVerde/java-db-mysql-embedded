@@ -1,48 +1,67 @@
-group 'com.softwareverde'
-version '2.1.6'
+plugins {
+    id 'java'
+    id 'java-library'
+}
 
-apply plugin: 'java'
-apply plugin: 'java-library'
+group 'com.softwareverde'
+version '3.0.0'
 
 sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    // implementation  fileTree(dir: 'libs', include: ['*.jar'])
+
+    api             group: 'com.github.softwareverde',  name: 'java-db',                version: 'v3.2.5'
+    api             group: 'com.github.softwareverde',  name: 'java-db-mysql',          version: 'v4.0.8'
+    implementation  group: 'com.github.softwareverde',  name: 'java-util',              version: 'v2.6.1'
+    implementation  group: 'com.github.softwareverde',  name: 'java-logging',           version: 'v2.2.0'
+
+    testImplementation 'junit:junit:4.12'
+}
+
+sourceSets {
+    main {
+        java
+        resources
+    }
+    test {
+        java
+        resources
+
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+task copyDependencies(type: Copy) {
+    from (configurations.compileClasspath + configurations.runtimeClasspath)
+    into "$buildDir/libs/libs"
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
 
 task makeJar(type: Jar) {
     manifest {
         attributes  'Implementation-Title': 'Java MySQL Embedded Database',
-                    'Implementation-Version': version
+                    'Implementation-Version': archiveVersion,
+                    'Main-Class': 'com.softwareverde.database.Main',
+                    'Class-Path': (project.configurations.compileClasspath + configurations.runtimeClasspath).collect { 'libs/' + it.getName() }.join(' ')
     }
     from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
     with jar
-}
 
-repositories {
-    mavenCentral()
-    maven { url "https://jitpack.io" }
-}
+    archiveBaseName = project.name
 
-dependencies {
-    api                 group: 'com.github.softwareverde',  name: 'java-db-mysql',      version: 'v4.0.8'
-    api                 (group: 'com.github.softwareverde', name: 'mariaDB4j',          version: 'v1.0.5') {
-        exclude group: 'org.apache.logging.log4j',              module: '*'
-        exclude group: 'ch.qos.logback',                        module: '*'
-        exclude group: 'org.springframework.boot',              module: '*'
-        exclude group: 'javax.annotations',                     module: '*'
-        exclude group: 'javax.enterprise',                      module: '*'
-        exclude group: 'javax.inject',                          module: '*'
-        exclude group: 'org.apache.maven',                      module: '*'
-        exclude group: 'org.hamcrest',                          module: '*'
-        exclude group: 'org.slf4j',                             module: '*'
-        exclude group: 'com.github.softwareverde.mariaDB4j',    module: 'mariaDB4j-maven-plugin'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
-        // exclude group: 'commons-io',                            module: '*'
-        // exclude group: 'org.springframework',                   module: '*'
-        // exclude group: 'org.apache.commons',                    module: '*'
-    }
+    from sourceSets.main.output
 
-    implementation      group: 'org.slf4j',                 name: 'slf4j-api',          version: '1.7.30'
-    implementation      group: 'com.github.softwareverde',  name: 'java-util',          version: 'v2.1.0'
-
-    testImplementation  group: 'junit',                     name: 'junit',              version: '4.12'
+    with jar
 }
 
 tasks.withType(Test) {
