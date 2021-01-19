@@ -1,4 +1,4 @@
-package com.softwareverde.database;
+package com.softwareverde.database.mysql.embedded;
 
 import com.softwareverde.constable.list.List;
 import com.softwareverde.constable.list.mutable.MutableList;

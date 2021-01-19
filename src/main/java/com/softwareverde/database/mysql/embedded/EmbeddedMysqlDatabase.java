@@ -1,7 +1,10 @@
-package com.softwareverde.database;
+package com.softwareverde.database.mysql.embedded;
 
+import com.softwareverde.database.mysql.MysqlDatabase;
+import com.softwareverde.database.mysql.embedded.properties.EmbeddedDatabaseProperties;
 import com.softwareverde.logging.Logger;
 import com.softwareverde.util.IoUtil;
+import com.softwareverde.util.Util;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -16,7 +19,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.concurrent.TimeUnit;
 
-public class MariaDb {
+public class EmbeddedMysqlDatabase extends MysqlDatabase {
     protected static File copyFile(final InputStream sourceStream, final String destinationFilename) {
         try {
             final Path destinationPath = Paths.get(destinationFilename);
@@ -33,39 +36,45 @@ public class MariaDb {
     }
 
     protected final String _configurationFileName = "mysql.conf";
-    protected final OperatingSystemType _operatingSystemType;
-    protected final File _installDirectory;
-    protected final File _dataDirectory;
+    protected final EmbeddedDatabaseProperties _databaseProperties;
+    protected final MysqlDatabaseConfiguration _databaseConfiguration;
 
     protected Process _process;
-    protected MysqlDatabaseConfiguration _databaseConfiguration;
 
     protected void _writeConfigFile() {
-        _dataDirectory.mkdirs();
+        final File dataDirectory = _databaseProperties.getDataDirectory();
+
+        dataDirectory.mkdirs();
+        final String configFileLocation = (dataDirectory.getPath() + "/" + _configurationFileName);
         final String configFileContents = (_databaseConfiguration != null ? _databaseConfiguration.getDefaultsFile() : "");
-        final String configFileLocation = (_dataDirectory.getPath() + "/" + _configurationFileName);
 
         Logger.debug("Writing config file to: " + configFileLocation);
         IoUtil.putFileContents(configFileLocation, configFileContents.getBytes(StandardCharsets.UTF_8));
     }
 
-    public MariaDb(final OperatingSystemType operatingSystemType, final File installDirectory, final File dataDirectory) {
-        _operatingSystemType = operatingSystemType;
-        _installDirectory = installDirectory;
-        _dataDirectory = dataDirectory;
+    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties) {
+        this(databaseProperties, null);
     }
 
-    public void setDatabaseConfiguration(final MysqlDatabaseConfiguration databaseConfiguration) {
+    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final MysqlDatabaseConfiguration databaseConfiguration) {
+        super(databaseProperties);
+
+        _databaseProperties = databaseProperties;
         _databaseConfiguration = databaseConfiguration;
-
-        _writeConfigFile();
     }
 
-    public void install(final String rootPassword) throws Exception {
-        _writeConfigFile();
+    public void install() throws Exception {
+        final OperatingSystemType operatingSystemType = _databaseProperties.getOperatingSystemType();
+        final File installationDirectory = _databaseProperties.getInstallationDirectory();
+        final File dataDirectory = _databaseProperties.getDataDirectory();
+        final String rootPassword = _databaseProperties.getRootPassword();
 
-        final String resourcePrefix = "/mysql/" + _operatingSystemType + "/";
+        final String resourcePrefix = "/mysql/" + operatingSystemType + "/";
         final String manifest = IoUtil.getResource(resourcePrefix + "manifest");
+        if (Util.isBlank(manifest)) {
+            throw new RuntimeException("Manifest not found for OS: " + operatingSystemType);
+        }
+
         for (final String manifestEntry : manifest.split("\n")) {
 
             final String flags;
@@ -82,10 +91,10 @@ public class MariaDb {
                 }
             }
 
-            final String destination = (_installDirectory.getPath() + resource.substring(resourcePrefix.length() - 1));
+            final String destination = (installationDirectory.getPath() + resource.substring(resourcePrefix.length() - 1));
             final InputStream inputStream = IoUtil.getResourceAsStream(resource);
             Logger.info("Copying: " + resource + " to " + destination);
-            final File copiedFile = MariaDb.copyFile(inputStream, destination);
+            final File copiedFile = EmbeddedMysqlDatabase.copyFile(inputStream, destination);
             final boolean copyWasSuccessful = (copiedFile != null);
             if (! copyWasSuccessful) {
                 throw new RuntimeException("Unable to copy resource: " + resource);
@@ -99,15 +108,16 @@ public class MariaDb {
             }
         }
 
-        _dataDirectory.mkdirs();
+        dataDirectory.mkdirs();
+        _writeConfigFile();
 
         final String command;
         {
-            final File file = new File(_installDirectory.getPath() + "/init.sh");
+            final File file = new File(installationDirectory.getPath() + "/init.sh");
             if (! (file.isFile() && file.canExecute())) {
                 throw new RuntimeException("Unable to initialize database. Init script not found.");
             }
-            command = (file.getPath() + " " + _dataDirectory.getPath());
+            command = (file.getPath() + " " + dataDirectory.getPath());
         }
         final Runtime runtime = Runtime.getRuntime();
         Logger.info("Exec: " + command);
@@ -156,15 +166,20 @@ public class MariaDb {
     }
 
     public void start() throws Exception {
-        _writeConfigFile();
+        final File installationDirectory = _databaseProperties.getInstallationDirectory();
+        final File dataDirectory = _databaseProperties.getDataDirectory();
+
+        if (_databaseConfiguration != null) {
+            _writeConfigFile();
+        }
 
         final String command;
         {
-            final File file = new File(_installDirectory.getPath() + "/run.sh");
+            final File file = new File(installationDirectory.getPath() + "/run.sh");
             if (! (file.isFile() && file.canExecute())) {
                 throw new RuntimeException("Unable to initialize database. Init script not found.");
             }
-            command = (file.getPath() + " " + _dataDirectory.getPath());
+            command = (file.getPath() + " " + dataDirectory.getPath());
         }
         final Runtime runtime = Runtime.getRuntime();
         Logger.info("Exec: " + command);
