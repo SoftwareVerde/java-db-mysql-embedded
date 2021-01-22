@@ -21,6 +21,12 @@ dependencies {
     implementation  group: 'com.github.softwareverde',  name: 'java-util',              version: 'v2.6.1'
     implementation  group: 'com.github.softwareverde',  name: 'java-logging',           version: 'v2.2.0'
 
+    // OS-Specific Prebuilt Binaries: (not mutually exclusive)
+    // implementation  group: 'com.github.softwareverde',  name: 'java-mariadb-osx',       version: 'v10.5.8'
+    // implementation  group: 'com.github.softwareverde',  name: 'java-mariadb-windows',   version: 'v10.5.8'
+    // implementation  group: 'com.github.softwareverde',  name: 'java-mariadb-linux',     version: 'v10.5.8'
+
+
     testImplementation 'junit:junit:4.12'
 }
 

@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.SequenceInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,6 +34,8 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
     protected static final String WINDOWS_MYSQL_CONFIGURATION_FILE_NAME = "my.ini";
 
     protected static File copyFile(final InputStream sourceStream, final String destinationFilename) {
+        if (sourceStream == null) { return null; }
+
         try {
             final Path destinationPath = Paths.get(destinationFilename);
             final File file = new File(destinationFilename);
@@ -221,8 +224,30 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
                 }
             }
 
+            final InputStream inputStream;
+            {
+                final InputStream wholeInputStream = IoUtil.getResourceAsStream(resource);
+                if (wholeInputStream != null) {
+                    inputStream = wholeInputStream;
+                }
+                else {
+                    // Attempt to find and concatenate the resources as parts.
+                    //  Resources may be fragmented in order to facilitate github hosting.
+                    InputStream compositeStream = null;
+                    int i = 0;
+                    while (true) {
+                        final InputStream fragmentStream = IoUtil.getResourceAsStream(resource + ".part" + i);
+                        if (fragmentStream == null) { break; }
+
+                        compositeStream = (compositeStream != null ? new SequenceInputStream(compositeStream, fragmentStream) : fragmentStream);
+
+                        i += 1;
+                    }
+                    inputStream = compositeStream;
+                }
+            }
+
             final String destination = (installationDirectory.getPath() + resource.substring(resourcePrefix.length() - 1));
-            final InputStream inputStream = IoUtil.getResourceAsStream(resource);
             Logger.info("Copying: " + resource + " to " + destination);
             final File copiedFile = EmbeddedMysqlDatabase.copyFile(inputStream, destination);
             final boolean copyWasSuccessful = (copiedFile != null);
