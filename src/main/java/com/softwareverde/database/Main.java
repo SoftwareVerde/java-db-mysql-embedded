@@ -39,27 +39,38 @@ public class Main {
         final MysqlDatabaseConfiguration databaseConfiguration = new MysqlDatabaseConfiguration();
         databaseConfiguration.setPort(MysqlDatabaseConfiguration.DEFAULT_PORT);
 
-        final DatabaseInitializer<Connection> databaseInitializer = new MysqlDatabaseInitializer(null, 0, new DatabaseInitializer.DatabaseUpgradeHandler<Connection>() {
+        final Integer databaseVersion = 1;
+        final DatabaseInitializer<Connection> databaseInitializer = new MysqlDatabaseInitializer(null, databaseVersion, new DatabaseInitializer.DatabaseUpgradeHandler<Connection>() {
             @Override
             public Boolean onUpgrade(final DatabaseConnection<Connection> maintenanceDatabaseConnection, final Integer previousVersion, final Integer requiredVersion) {
-                throw new RuntimeException("Database upgrade not supported.");
+                return (previousVersion <= databaseVersion);
             }
         });
 
+        EmbeddedMysqlDatabase embeddedMysqlDatabase = null;
         try {
-            final EmbeddedMysqlDatabase embeddedMysqlDatabase = new EmbeddedMysqlDatabase(databaseProperties, databaseInitializer, databaseConfiguration);
-            embeddedMysqlDatabase.install();
+            embeddedMysqlDatabase = new EmbeddedMysqlDatabase(databaseProperties, databaseInitializer, databaseConfiguration);
+            if (! embeddedMysqlDatabase.wasInstalled()) {
+                embeddedMysqlDatabase.install();
+            }
             embeddedMysqlDatabase.start();
+            Logger.info("Database online.");
 
             final Thread thread = Thread.currentThread();
             while (! thread.isInterrupted()) {
                 Thread.sleep(1000L);
             }
-
-            embeddedMysqlDatabase.stop();
         }
         catch (final Exception exception) {
             Logger.debug(exception);
+        }
+        finally {
+            try {
+                if (embeddedMysqlDatabase != null) {
+                    embeddedMysqlDatabase.stop();
+                }
+            }
+            catch (final Exception exception) { }
         }
     }
 }

@@ -11,6 +11,7 @@ import com.softwareverde.database.query.Query;
 import com.softwareverde.logging.Logger;
 import com.softwareverde.util.IoUtil;
 import com.softwareverde.util.Util;
+import com.softwareverde.util.timer.NanoTimer;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -28,6 +29,9 @@ import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
 public class EmbeddedMysqlDatabase extends MysqlDatabase {
+    protected static final String UNIX_MYSQL_CONFIGURATION_FILE_NAME = "mysql.conf";
+    protected static final String WINDOWS_MYSQL_CONFIGURATION_FILE_NAME = "my.ini";
+
     protected static File copyFile(final InputStream sourceStream, final String destinationFilename) {
         try {
             final Path destinationPath = Paths.get(destinationFilename);
@@ -42,6 +46,14 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
             return null;
         }
     }
+
+    protected final EmbeddedDatabaseProperties _databaseProperties;
+    protected final DatabaseInitializer<Connection> _databaseInitializer;
+    protected final MysqlDatabaseConfiguration _databaseConfiguration;
+
+    protected Boolean _shutdownHookInstalled = false;
+    protected Long _timeoutMs = (30L * 1000L);
+    protected Process _process;
 
     protected void _deleteTestDatabase(final MysqlDatabaseConnection databaseConnection) throws DatabaseException {
         databaseConnection.executeDdl("DROP DATABASE IF EXISTS `test`");
@@ -72,87 +84,120 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
         }
     }
 
-    protected void _createSchema(final MysqlDatabaseConnection databaseConnection, final String schema) throws DatabaseException {
-        databaseConnection.executeDdl("CREATE DATABASE IF NOT EXISTS `" + schema + "`");
+    /**
+     * Attempts to obtain the stored database version via the root connection and uses the user credential as failover.
+     *  Returns 0 if the database has not been setup or if connections could not be established.
+     */
+    protected Integer _getDatabaseVersionNumber() {
+        final DatabaseCredentials rootDatabaseCredentials = new DatabaseCredentials("root", _databaseProperties.getRootPassword());
+        final DatabaseCredentials databaseCredentials = _databaseProperties.getCredentials();
+
+        final MysqlDatabaseConnectionFactory rootDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(_databaseProperties.getHostname(), _databaseProperties.getPort(), _databaseProperties.getSchema(), rootDatabaseCredentials.username, rootDatabaseCredentials.password, _connectionProperties);
+        final MysqlDatabaseConnectionFactory databaseConnectionFactory = new MysqlDatabaseConnectionFactory(_databaseProperties.getHostname(), _databaseProperties.getPort(), _databaseProperties.getSchema(), databaseCredentials.username, databaseCredentials.password, _connectionProperties);
+
+        Integer databaseVersionNumber = 0;
+
+        try {
+            // Attempt to connect via root first since it should always have credentials (but may have been removed)...
+            try (final MysqlDatabaseConnection databaseConnection = rootDatabaseConnectionFactory.newConnection()) {
+                databaseVersionNumber = _databaseInitializer.getDatabaseVersionNumber(databaseConnection);
+            }
+        }
+        catch (final DatabaseException ignoredException) { }
+
+        if (databaseVersionNumber == 0) {
+            // If a root connect cannot be established, attempt to connect via user credentials...
+            try (final MysqlDatabaseConnection databaseConnection = databaseConnectionFactory.newConnection()) {
+                databaseVersionNumber = _databaseInitializer.getDatabaseVersionNumber(databaseConnection);
+            }
+            catch (final DatabaseException exception) { }
+        }
+
+        return databaseVersionNumber;
     }
 
     protected void _initializeDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer, final Properties connectionProperties) throws DatabaseException {
         final DatabaseCredentials rootCredentials = new DatabaseCredentials("root", databaseProperties.getRootPassword());
-        // final Credentials credentials = new Credentials(databaseProperties.getUsername(), databaseProperties.getPassword());;
 
-        DatabaseException setupException = null;
-        // Set the root account credentials, setup maintenance account, and harden the database...
-        final MysqlDatabaseConnectionFactory rootDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(databaseProperties.getHostname(), databaseProperties.getPort(), "", rootCredentials.username, rootCredentials.password, connectionProperties);
-        try (final MysqlDatabaseConnection rootDatabaseConnection = rootDatabaseConnectionFactory.newConnection()) {
-            try {
-                final Integer databaseVersionNumber = databaseInitializer.getDatabaseVersionNumber(rootDatabaseConnection);
-                if (databaseVersionNumber == 0) {
-                    _initializeRootAccount(rootDatabaseConnection, rootCredentials);
-                    _deleteTestDatabase(rootDatabaseConnection);
-                    _createSchema(rootDatabaseConnection, databaseProperties.getSchema());
-                    databaseInitializer.initializeSchema(rootDatabaseConnection, databaseProperties);
+        final Integer databaseVersionNumber = _getDatabaseVersionNumber();
+        if (databaseVersionNumber == 0) {
+            Logger.info("Initializing database.");
+            // If the database version wasn't able to be obtained initially then assume the database needs to be setup for its first run.
+            final MysqlDatabaseConnectionFactory rootDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(databaseProperties.getHostname(), databaseProperties.getPort(), "", rootCredentials.username, rootCredentials.password, connectionProperties);
+            try (final MysqlDatabaseConnection rootDatabaseConnection = rootDatabaseConnectionFactory.newConnection()) {
+                _initializeRootAccount(rootDatabaseConnection, rootCredentials);
+                _deleteTestDatabase(rootDatabaseConnection);
+                databaseInitializer.initializeSchema(rootDatabaseConnection, databaseProperties);
+            }
+        }
+
+        final DatabaseCredentials maintenanceCredentials = databaseInitializer.getMaintenanceCredentials(databaseProperties);
+        if (maintenanceCredentials != null) {
+            // Switch over to the maintenance account for the database initialization...
+            final MysqlDatabaseConnectionFactory maintenanceCredentialsDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(databaseProperties, maintenanceCredentials, connectionProperties);
+            try (final MysqlDatabaseConnection maintenanceDatabaseConnection = maintenanceCredentialsDatabaseConnectionFactory.newConnection()) {
+                databaseInitializer.initializeDatabase(maintenanceDatabaseConnection);
+                final Integer postUpgradeDatabaseVersionNumber = databaseInitializer.getDatabaseVersionNumber(maintenanceDatabaseConnection);
+                if (postUpgradeDatabaseVersionNumber < 1) {
+                    throw new DatabaseException("Database version must be set after first initialization.");
                 }
             }
             catch (final DatabaseException databaseException) {
-                // The setup failed, which should cause the initialization to fail..
-                setupException = databaseException;
+                throw new DatabaseException("Unable to complete database maintenance.", databaseException);
             }
         }
-        catch (final DatabaseException exception) {
-            // The default root credentials failed, which is likely because the database has already been configured...
-        }
-
-        if (setupException != null) { throw setupException; }
-
-        final DatabaseCredentials maintenanceCredentials = databaseInitializer.getMaintenanceCredentials(databaseProperties);
-
-        // Switch over to the maintenance account for the database initialization...
-        final MysqlDatabaseConnectionFactory maintenanceCredentialsDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(databaseProperties, maintenanceCredentials, connectionProperties);
-        try (final MysqlDatabaseConnection maintenanceDatabaseConnection = maintenanceCredentialsDatabaseConnectionFactory.newConnection()) {
-            databaseInitializer.initializeDatabase(maintenanceDatabaseConnection);
+        else {
+            Logger.info("Maintenance credentials are not available; database upgrades are not available.");
         }
     }
 
-    protected final String _configurationFileName = "mysql.conf";
-    protected final EmbeddedDatabaseProperties _databaseProperties;
-    protected final DatabaseInitializer<Connection> _databaseInitializer;
-    protected final MysqlDatabaseConfiguration _databaseConfiguration;
+    protected void _installShutdownHook() {
+        final Runtime runtime = Runtime.getRuntime();
+        runtime.addShutdownHook(new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    _stop();
+                }
+                catch (final Exception exception) {
+                    _process.destroyForcibly();
+                }
+            }
+        }));
+    }
 
-    protected Process _process;
+    protected void _stop() throws Exception {
+        if (_process == null) { return; }
 
-    protected void _writeConfigFile() {
+        _process.destroy();
+
+        final boolean initWasSuccessful = _process.waitFor(_timeoutMs, TimeUnit.MILLISECONDS);
+        if (! initWasSuccessful) {
+            throw new RuntimeException("Unable to stop database. Shutdown failed after timeout.");
+        }
+
+        _process = null;
+    }
+
+    protected Boolean _doesMysqlDataExist(final File dataDirectory) {
+        final File mysqlSystemDatabase = new File(dataDirectory.getPath() + "/mysql");
+        return mysqlSystemDatabase.exists();
+    }
+
+    protected void _writeConfigFile(final String configurationFileName) {
         final File dataDirectory = _databaseProperties.getDataDirectory();
 
         dataDirectory.mkdirs();
-        final String configFileLocation = (dataDirectory.getPath() + "/" + _configurationFileName);
+        final String configFileLocation = (dataDirectory.getPath() + "/" + configurationFileName);
         final String configFileContents = (_databaseConfiguration != null ? _databaseConfiguration.getDefaultsFile() : "");
 
         Logger.debug("Writing config file to: " + configFileLocation);
         IoUtil.putFileContents(configFileLocation, configFileContents.getBytes(StandardCharsets.UTF_8));
     }
 
-    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer) {
-        this(databaseProperties, databaseInitializer, null);
-    }
-
-    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer, final MysqlDatabaseConfiguration databaseConfiguration) {
-        this(databaseProperties, databaseInitializer, databaseConfiguration, null);
-    }
-
-    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer, final MysqlDatabaseConfiguration databaseConfiguration, final Properties connectionProperties) {
-        super(databaseProperties.getHostname(), databaseProperties.getPort(), databaseProperties.getCredentials().username, databaseProperties.getCredentials().password, connectionProperties);
-
-        _schema = databaseProperties.getSchema();
-        _databaseProperties = databaseProperties;
-        _databaseConfiguration = databaseConfiguration;
-        _databaseInitializer = databaseInitializer;
-    }
-
-    public void install() throws Exception {
+    protected void _installFilesFromManifest() {
         final OperatingSystemType operatingSystemType = _databaseProperties.getOperatingSystemType();
         final File installationDirectory = _databaseProperties.getInstallationDirectory();
-        final File dataDirectory = _databaseProperties.getDataDirectory();
-        final String rootPassword = _databaseProperties.getRootPassword();
 
         final String resourcePrefix = "/mysql/" + operatingSystemType + "/";
         final String manifest = IoUtil.getResource(resourcePrefix + "manifest");
@@ -192,9 +237,20 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
                 }
             }
         }
+    }
 
-        dataDirectory.mkdirs();
-        _writeConfigFile();
+    protected void _installUnix() throws Exception {
+        final File installationDirectory = _databaseProperties.getInstallationDirectory();
+        final File dataDirectory = _databaseProperties.getDataDirectory();
+        final String rootPassword = _databaseProperties.getRootPassword();
+
+        _installFilesFromManifest();
+
+        final Boolean mysqlDataWasAlreadyInstalled = _doesMysqlDataExist(dataDirectory);
+        if (mysqlDataWasAlreadyInstalled) {
+            _writeConfigFile(UNIX_MYSQL_CONFIGURATION_FILE_NAME);
+            return;
+        }
 
         final String command;
         {
@@ -232,7 +288,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
                     }
                 })).start();
 
-                final boolean initWasSuccessful = process.waitFor(30, TimeUnit.SECONDS);
+                final boolean initWasSuccessful = process.waitFor(_timeoutMs, TimeUnit.MILLISECONDS);
                 if (! initWasSuccessful) {
                     throw new RuntimeException("Unable to initialize database. Init failed after timeout.");
                 }
@@ -248,21 +304,95 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
                 process.destroyForcibly();
             }
         }
+
+        dataDirectory.mkdirs();
+        _writeConfigFile(UNIX_MYSQL_CONFIGURATION_FILE_NAME);
     }
 
-    public void start() throws Exception {
+    protected void _installWindows() throws Exception {
+        final File installationDirectory = _databaseProperties.getInstallationDirectory();
+        final File dataDirectory = _databaseProperties.getDataDirectory();
+        final String rootPassword = _databaseProperties.getRootPassword();
+
+        _installFilesFromManifest();
+
+        final Boolean mysqlDataWasAlreadyInstalled = _doesMysqlDataExist(dataDirectory);
+        if (mysqlDataWasAlreadyInstalled) {
+            _writeConfigFile(WINDOWS_MYSQL_CONFIGURATION_FILE_NAME);
+            return;
+        }
+
+        final String command;
+        {
+            final File file = new File(installationDirectory.getPath() + "/base/bin/mysql_install_db.exe");
+            if (! (file.isFile() && file.canExecute())) {
+                throw new RuntimeException("Unable to initialize database. Init script not found.");
+            }
+            // final File baseDir = new File(installationDirectory.getPath() + "/base");
+            // " --basedir=" + baseDir.getPath()
+
+            // NOTE: mysql_install_db.exe detects the base directory on its own, and providing it is an error ("unknown variable").
+            //  mysql_install_db.exe requires that the data directory is empty.
+            //  mysql_install_db.exe generates a minimal my.ini file within the data directory, setting the basedir.
+            command = (file.getPath() + " --datadir=" + dataDirectory.getPath() + " --password=" + rootPassword);
+        }
+        final Runtime runtime = Runtime.getRuntime();
+        Logger.info("Exec: " + command);
+        Process process = null;
+        try {
+            process = runtime.exec(command);
+
+            try (
+                final InputStream inputStream = process.getInputStream();
+                final BufferedReader processOutput = new BufferedReader(new InputStreamReader(inputStream))
+            ) {
+                (new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            String line;
+                            while ((line = processOutput.readLine()) != null) {
+                                Logger.debug(line);
+                            }
+                        }
+                        catch (final Exception exception) { }
+                    }
+                })).start();
+
+                final boolean initWasSuccessful = process.waitFor(_timeoutMs, TimeUnit.MILLISECONDS);
+                if (! initWasSuccessful) {
+                    throw new RuntimeException("Unable to initialize database. Init failed after timeout.");
+                }
+
+                final boolean resultCodeWasSuccessful = (process.exitValue() == 0);
+                if (! resultCodeWasSuccessful) {
+                    throw new RuntimeException("Unable to initialize database. Init script failed.");
+                }
+            }
+        }
+        finally {
+            if (process != null) {
+                process.destroyForcibly();
+            }
+        }
+
+        dataDirectory.mkdirs();
+        _writeConfigFile(WINDOWS_MYSQL_CONFIGURATION_FILE_NAME);
+    }
+
+    protected void _startDatabaseUnix() throws Exception {
         final File installationDirectory = _databaseProperties.getInstallationDirectory();
         final File dataDirectory = _databaseProperties.getDataDirectory();
 
         if (_databaseConfiguration != null) {
-            _writeConfigFile();
+            _writeConfigFile(UNIX_MYSQL_CONFIGURATION_FILE_NAME);
         }
 
         final String command;
         {
             final File file = new File(installationDirectory.getPath() + "/run.sh");
             if (! (file.isFile() && file.canExecute())) {
-                throw new RuntimeException("Unable to initialize database. Init script not found.");
+                throw new RuntimeException("Unable to start database. Run script not found.");
             }
             command = (file.getPath() + " " + dataDirectory.getPath());
         }
@@ -284,16 +414,154 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
                 catch (final Exception exception) { }
             }
         })).start();
+    }
+
+    protected void _startDatabaseWindows() throws Exception {
+        final File installationDirectory = _databaseProperties.getInstallationDirectory();
+        final File dataDirectory = _databaseProperties.getDataDirectory();
+
+        if (_databaseConfiguration != null) {
+            _writeConfigFile(WINDOWS_MYSQL_CONFIGURATION_FILE_NAME);
+        }
+
+        final File tmpDir = new File(dataDirectory.getPath() + "/tmp");
+        tmpDir.mkdirs();
+
+        final String command;
+        {
+            final File file = new File(installationDirectory.getPath() + "/base/bin/mysqld.exe");
+            if (! (file.isFile() && file.canExecute())) {
+                throw new RuntimeException("Unable to start database. Binary not found.");
+            }
+            final File baseDir = new File(installationDirectory.getPath() + "/base");
+            final File defaultsFile = new File(dataDirectory.getPath() + "/" + WINDOWS_MYSQL_CONFIGURATION_FILE_NAME);
+            command = (file.getPath() + " --defaults-file=" + defaultsFile.getPath() + " --basedir=" + baseDir.getPath() + " --datadir=" + dataDirectory.getAbsolutePath() + " --tmpdir=" + tmpDir.getAbsolutePath() + " --console");
+        }
+        final Runtime runtime = Runtime.getRuntime();
+        Logger.info("Exec: " + command);
+        _process = runtime.exec(command);
+
+        final InputStream inputStream = _process.getInputStream();
+        final BufferedReader processOutput = new BufferedReader(new InputStreamReader(inputStream));
+        (new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    String line;
+                    while ((line = processOutput.readLine()) != null) {
+                        Logger.debug(line);
+                    }
+                }
+                catch (final Exception exception) { }
+            }
+        })).start();
+    }
+
+    protected Boolean _isDatabaseOnline() {
+        final DatabaseCredentials rootDatabaseCredentials = new DatabaseCredentials("root", _databaseProperties.getRootPassword());
+        final DatabaseCredentials databaseCredentials = _databaseProperties.getCredentials();
+
+        final MysqlDatabaseConnectionFactory rootDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(_databaseProperties.getHostname(), _databaseProperties.getPort(), "", rootDatabaseCredentials.username, rootDatabaseCredentials.password, _connectionProperties);
+        final MysqlDatabaseConnectionFactory databaseConnectionFactory = new MysqlDatabaseConnectionFactory(_databaseProperties.getHostname(), _databaseProperties.getPort(), _databaseProperties.getSchema(), databaseCredentials.username, databaseCredentials.password, _connectionProperties);
+
+        try {
+            // Attempt to connect via root first since it should always have credentials (but may have been removed)...
+            try (final MysqlDatabaseConnection databaseConnection = rootDatabaseConnectionFactory.newConnection()) {
+                databaseConnection.query(new Query("SELECT 1"));
+                return true;
+            }
+        }
+        catch (final DatabaseException ignoredException) {
+            // If a root connect cannot be established, attempt to connect via user credentials...
+            try (final MysqlDatabaseConnection databaseConnection = databaseConnectionFactory.newConnection()) {
+                databaseConnection.query(new Query("SELECT 1"));
+                return true;
+            }
+            catch (final DatabaseException exception) {
+                return false;
+            }
+        }
+    }
+
+    protected void _waitForDatabaseToComeOnline(final Long timeoutMs) throws Exception {
+        final NanoTimer nanoTimer = new NanoTimer();
+        nanoTimer.start();
+
+        do {
+            final Boolean databaseIsOnline = _isDatabaseOnline();
+            if (databaseIsOnline) { return; }
+
+            Thread.sleep(250L);
+            nanoTimer.stop();
+        } while (nanoTimer.getMillisecondsElapsed() < timeoutMs);
+
+        if (nanoTimer.getMillisecondsElapsed() >= timeoutMs) {
+            throw new Exception("Server failed to come online after " + timeoutMs + "ms.");
+        }
+    }
+
+    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer) {
+        this(databaseProperties, databaseInitializer, null);
+    }
+
+    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer, final MysqlDatabaseConfiguration databaseConfiguration) {
+        this(databaseProperties, databaseInitializer, databaseConfiguration, null);
+    }
+
+    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer, final MysqlDatabaseConfiguration databaseConfiguration, final Properties connectionProperties) {
+        super(databaseProperties.getHostname(), databaseProperties.getPort(), databaseProperties.getCredentials().username, databaseProperties.getCredentials().password, connectionProperties);
+
+        _schema = databaseProperties.getSchema();
+        _databaseProperties = databaseProperties;
+        _databaseConfiguration = databaseConfiguration;
+        _databaseInitializer = databaseInitializer;
+    }
+
+    protected void setTimeout(final Long timeoutMs) {
+        _timeoutMs = timeoutMs;
+    }
+
+    public void install() throws Exception {
+        final OperatingSystemType operatingSystemType = _databaseProperties.getOperatingSystemType();
+        if (operatingSystemType == OperatingSystemType.WINDOWS) {
+            _installWindows();
+            return;
+        }
+
+        _installUnix();
+    }
+
+    public void start() throws Exception {
+        final OperatingSystemType operatingSystemType = _databaseProperties.getOperatingSystemType();
+        if (operatingSystemType == OperatingSystemType.WINDOWS) {
+            if (! _shutdownHookInstalled) {
+                _installShutdownHook();
+            }
+
+            _startDatabaseWindows();
+        }
+        else {
+            // NOTE: The shutdown hook is not necessary on Unix because of the intercept trap within its run script.
+            _startDatabaseUnix();
+        }
+
+        _waitForDatabaseToComeOnline(_timeoutMs);
 
         _initializeDatabase(_databaseProperties, _databaseInitializer, _connectionProperties);
     }
 
     public void stop() throws Exception {
-        _process.destroy();
+        _stop();
+    }
 
-        final boolean initWasSuccessful = _process.waitFor(30, TimeUnit.SECONDS);
-        if (! initWasSuccessful) {
-            throw new RuntimeException("Unable to stop database. Shutdown failed after timeout.");
-        }
+    public Boolean wasInstalled() {
+        final File installationDirectory = _databaseProperties.getInstallationDirectory();
+        final File dataDirectory = _databaseProperties.getDataDirectory();
+
+        final File mariaDbBaseDirectory = new File(installationDirectory + "/base");
+        final boolean mariaDbWasInstalled = mariaDbBaseDirectory.exists();
+        if (! mariaDbWasInstalled) { return false; }
+
+        return _doesMysqlDataExist(dataDirectory);
     }
 }

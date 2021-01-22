@@ -17,7 +17,7 @@ dependencies {
     // implementation  fileTree(dir: 'libs', include: ['*.jar'])
 
     api             group: 'com.github.softwareverde',  name: 'java-db',                version: 'v3.2.5'
-    api             group: 'com.github.softwareverde',  name: 'java-db-mysql',          version: 'v4.0.8'
+    api             group: 'com.github.softwareverde',  name: 'java-db-mysql',          version: 'v4.1.0'
     implementation  group: 'com.github.softwareverde',  name: 'java-util',              version: 'v2.6.1'
     implementation  group: 'com.github.softwareverde',  name: 'java-logging',           version: 'v2.2.0'
 
