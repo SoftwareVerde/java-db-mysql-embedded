@@ -248,7 +248,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
             }
 
             final String destination = (installationDirectory.getPath() + resource.substring(resourcePrefix.length() - 1));
-            Logger.info("Copying: " + resource + " to " + destination);
+            Logger.debug("Extracting: " + resource + " to " + destination);
             final File copiedFile = EmbeddedMysqlDatabase.copyFile(inputStream, destination);
             final boolean copyWasSuccessful = (copiedFile != null);
             if (! copyWasSuccessful) {

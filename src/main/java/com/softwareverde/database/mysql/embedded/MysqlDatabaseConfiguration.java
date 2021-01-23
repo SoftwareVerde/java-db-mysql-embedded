@@ -16,7 +16,7 @@ import com.softwareverde.constable.list.mutable.MutableList;
  * <p>For more information visit: https://dev.mysql.com/doc/refman/8.0/en/server-system-variables.html</p>
  */
 public class MysqlDatabaseConfiguration {
-    public static final Long DEFAULT_PORT = 3306L;
+    public static final Integer DEFAULT_PORT = 3306;
 
     protected static void _addArgumentIfNotNull(final MutableList<String> arguments, final String argumentName, final Object value) {
         if (value != null) {
@@ -36,7 +36,7 @@ public class MysqlDatabaseConfiguration {
     }
 
     protected final MutableList<String> _arguments;
-    protected Long _port;
+    protected Integer _port;
     protected Long _maxConnectionCount;
     protected Long _maxAllowedPacketByteCount;
     protected Long _keyBufferByteCount;
@@ -74,9 +74,6 @@ public class MysqlDatabaseConfiguration {
 
     protected Boolean _performanceSchemaEnable;
 
-    protected final MutableList<String> _installationArguments;
-    protected Integer _innoDbForceRecoveryLevel;
-
     protected MutableList<String> _getArguments() {
         final MutableList<String> arguments = new MutableList<>(_arguments);
 
@@ -101,7 +98,7 @@ public class MysqlDatabaseConfiguration {
         _addArgumentIfNotNull(arguments, "--innodb-io-capacity-max", _innoDbIoCapacityMax);
         _addArgumentIfNotNull(arguments, "--innodb-page-cleaners", _innoDbPageCleaners);
         _addArgumentIfNotNull(arguments, "--innodb-max-dirty-pages-pct", _innoDbMaxDirtyPagesPercent);
-        _addArgumentIfNotNull(arguments, "--innodb-max-dirty-pages-pct-lw", _innoDbMaxDirtyPagesPercentLowWaterMark);
+        _addArgumentIfNotNull(arguments, "--innodb-max-dirty-pages-pct-lwm", _innoDbMaxDirtyPagesPercentLowWaterMark);
         _addArgumentIfNotNull(arguments, "--innodb-read-io-threads", _innoDbReadIoThreads);
         _addArgumentIfNotNull(arguments, "--innodb-write-io-threads", _innoDbWriteIoThreads);
         _addArgumentIfNotNull(arguments, "--innodb-lru-scan-depth", _innoDbLeastRecentlyUsedScanDepth);
@@ -131,7 +128,6 @@ public class MysqlDatabaseConfiguration {
 
     public MysqlDatabaseConfiguration() {
         _arguments = new MutableList<>();
-        _installationArguments = new MutableList<>();
     }
 
     /**
@@ -148,15 +144,7 @@ public class MysqlDatabaseConfiguration {
         _arguments.add(argument);
     }
 
-    /**
-     * Allows for adding arbitrary string arguments to the command-line during execution of mysql_install_db.
-     * This functions nearly identically to addArgument(String).
-     */
-    public void addInstallationArgument(final String argument) {
-        _installationArguments.add(argument);
-    }
-
-    public void setPort(final Long port) {
+    public void setPort(final Integer port) {
         _port = port;
     }
 
@@ -206,10 +194,6 @@ public class MysqlDatabaseConfiguration {
 
     public void setInnoDbLogBufferByteCount(final Long innoDbLogBufferByteCount) {
         _innoDbLogBufferByteCount = innoDbLogBufferByteCount;
-    }
-
-    public void setInnoDbForceRecoveryLevel(final Integer innoDbForceRecoveryLevel) {
-        _innoDbForceRecoveryLevel = innoDbForceRecoveryLevel;
     }
 
     public void enableSlowQueryLog(final String logFileName, final Long minimumQueryTime) {
@@ -288,14 +272,6 @@ public class MysqlDatabaseConfiguration {
 
     public List<String> getCommandlineArguments() {
         return _getArguments();
-    }
-
-    public List<String> getInstallationCommandlineArguments() {
-        final MutableList<String> installationArguments = new MutableList<>(_installationArguments);
-
-        _addArgumentIfNotNull(installationArguments, "--innodb_force_recovery", _innoDbForceRecoveryLevel);
-
-        return installationArguments;
     }
 
     public String getDefaultsFile() {
