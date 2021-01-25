@@ -10,6 +10,7 @@ import com.softwareverde.database.properties.DatabaseCredentials;
 import com.softwareverde.database.query.Query;
 import com.softwareverde.logging.Logger;
 import com.softwareverde.util.IoUtil;
+import com.softwareverde.util.SystemUtil;
 import com.softwareverde.util.Util;
 import com.softwareverde.util.timer.NanoTimer;
 
@@ -57,6 +58,9 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
     protected Boolean _shutdownHookInstalled = false;
     protected Long _timeoutMs = (30L * 1000L);
     protected Process _process;
+    protected OutputStream _processOutputStream;
+    protected InputStream _processInputStream;
+    protected Thread _processInputReadThread;
 
     protected void _deleteTestDatabase(final MysqlDatabaseConnection databaseConnection) throws DatabaseException {
         databaseConnection.executeDdl("DROP DATABASE IF EXISTS `test`");
@@ -163,7 +167,10 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
                     _stop();
                 }
                 catch (final Exception exception) {
-                    _process.destroyForcibly();
+                    final Process process = _process;
+                    if (process != null) {
+                        process.destroyForcibly();
+                    }
                 }
             }
         }));
@@ -171,15 +178,45 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
 
     protected void _stop() throws Exception {
         if (_process == null) { return; }
+        Logger.info("Shutting down database.");
 
-        _process.destroy();
+        try (
+            final OutputStream outputStream = _processOutputStream;
+            final InputStream inputStream = _processInputStream
+        ) {
+            try {
+                final String exitString = ("exit" + System.lineSeparator());
+                outputStream.write(exitString.getBytes(StandardCharsets.UTF_8));
+                outputStream.flush();
 
-        final boolean initWasSuccessful = _process.waitFor(_timeoutMs, TimeUnit.MILLISECONDS);
-        if (! initWasSuccessful) {
-            throw new RuntimeException("Unable to stop database. Shutdown failed after timeout.");
+                // Wait for the input to be recognized and for the script to exit naturally.
+                _processInputReadThread.join(_timeoutMs);
+                Logger.trace("Process IO closed.");
+            }
+            catch (final Exception exception) {
+                Logger.debug(exception);
+            }
         }
+        finally {
+            _processOutputStream = null;
+            _processInputStream = null;
 
-        _process = null;
+            Logger.trace("Destroying process.");
+            _process.destroy();
+
+            try {
+                final boolean initWasSuccessful = _process.waitFor(_timeoutMs, TimeUnit.MILLISECONDS);
+                if (! initWasSuccessful) {
+                    Logger.debug("Forcibly destroying process.");
+                    _process.destroyForcibly();
+
+                    throw new RuntimeException("Unable to stop database. Shutdown failed after timeout.");
+                }
+            }
+            finally {
+                _process = null;
+            }
+        }
     }
 
     protected Boolean _doesMysqlDataExist(final File dataDirectory) {
@@ -269,13 +306,18 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
         final File dataDirectory = _databaseProperties.getDataDirectory();
         final String rootPassword = _databaseProperties.getRootPassword();
 
+        // Always install the new binaries when invoked.
         _installFilesFromManifest();
 
+        // If the data directory has already be initialized then exit.
         final Boolean mysqlDataWasAlreadyInstalled = _doesMysqlDataExist(dataDirectory);
         if (mysqlDataWasAlreadyInstalled) {
             _writeConfigFile(UNIX_MYSQL_CONFIGURATION_FILE_NAME);
             return;
         }
+
+        final File dataDirectoryParent = dataDirectory.getParentFile();
+        dataDirectoryParent.mkdirs(); // Ensure the data directory's path exists (but not the data directory itself).
 
         final String command;
         {
@@ -330,7 +372,15 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
             }
         }
 
-        dataDirectory.mkdirs();
+        { // Store the data directory location for run.sh
+            final File dataDirectoryHelperFile = new File(installationDirectory.getPath() + "/.datadir");
+            final Path installationDirectoryPath = Paths.get(installationDirectory.getAbsolutePath());
+            final Path dataDirectoryPath = Paths.get(dataDirectory.getAbsolutePath());
+            final Path relativeDataDirectoryPath = installationDirectoryPath.relativize(dataDirectoryPath);
+            final String relativeDataDirectoryPathString = relativeDataDirectoryPath.toString();
+            IoUtil.putFileContents(dataDirectoryHelperFile, relativeDataDirectoryPathString.getBytes(StandardCharsets.UTF_8));
+        }
+
         _writeConfigFile(UNIX_MYSQL_CONFIGURATION_FILE_NAME);
     }
 
@@ -339,13 +389,18 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
         final File dataDirectory = _databaseProperties.getDataDirectory();
         final String rootPassword = _databaseProperties.getRootPassword();
 
+        // Always install the new binaries when invoked.
         _installFilesFromManifest();
 
+        // If the data directory has already be initialized then exit.
         final Boolean mysqlDataWasAlreadyInstalled = _doesMysqlDataExist(dataDirectory);
         if (mysqlDataWasAlreadyInstalled) {
             _writeConfigFile(WINDOWS_MYSQL_CONFIGURATION_FILE_NAME);
             return;
         }
+
+        final File dataDirectoryParent = dataDirectory.getParentFile();
+        dataDirectoryParent.mkdirs(); // Ensure the data directory's path exists (but not the data directory itself).
 
         final String command;
         {
@@ -353,8 +408,6 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
             if (! (file.isFile() && file.canExecute())) {
                 throw new RuntimeException("Unable to initialize database. Init script not found.");
             }
-            // final File baseDir = new File(installationDirectory.getPath() + "/base");
-            // " --basedir=" + baseDir.getPath()
 
             // NOTE: mysql_install_db.exe detects the base directory on its own, and providing it is an error ("unknown variable").
             //  mysql_install_db.exe requires that the data directory is empty.
@@ -401,13 +454,23 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
             }
         }
 
-        dataDirectory.mkdirs();
+        { // Store the data directory location for run.bat
+            final File dataDirectoryHelperFile = new File(installationDirectory.getPath() + "/.datadir");
+            final Path installationDirectoryPath = Paths.get(installationDirectory.getAbsolutePath());
+            final Path dataDirectoryPath = Paths.get(dataDirectory.getAbsolutePath());
+            final Path relativeDataDirectoryPath = installationDirectoryPath.relativize(dataDirectoryPath);
+            final String relativeDataDirectoryPathString = relativeDataDirectoryPath.toString();
+            IoUtil.putFileContents(dataDirectoryHelperFile, relativeDataDirectoryPathString.getBytes(StandardCharsets.UTF_8));
+        }
+
+        // NOTE: Since this command will create the data directory if it does not exist, and since the windows
+        //  version of the mysql data installer requires the data directory not exist, this command must run after
+        //  the data installation completes.
         _writeConfigFile(WINDOWS_MYSQL_CONFIGURATION_FILE_NAME);
     }
 
     protected void _startDatabaseUnix() throws Exception {
         final File installationDirectory = _databaseProperties.getInstallationDirectory();
-        final File dataDirectory = _databaseProperties.getDataDirectory();
 
         if (_databaseConfiguration != null) {
             _writeConfigFile(UNIX_MYSQL_CONFIGURATION_FILE_NAME);
@@ -419,67 +482,79 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
             if (! (file.isFile() && file.canExecute())) {
                 throw new RuntimeException("Unable to start database. Run script not found.");
             }
-            command = (file.getPath() + " " + dataDirectory.getPath());
+            command = file.getPath();
         }
         final Runtime runtime = Runtime.getRuntime();
         Logger.info("Exec: " + command);
         _process = runtime.exec(command);
 
-        final InputStream inputStream = _process.getInputStream();
-        final BufferedReader processOutput = new BufferedReader(new InputStreamReader(inputStream));
-        (new Thread(new Runnable() {
+        _processOutputStream = _process.getOutputStream();
+        _processInputStream = _process.getInputStream();
+        _processInputReadThread = new Thread(new Runnable() {
             @Override
             public void run() {
-                try {
+                try (
+                    final InputStream inputStream = _processInputStream;
+                    final InputStreamReader inputStreamReader = new InputStreamReader(inputStream);
+                    final BufferedReader processOutput = new BufferedReader(inputStreamReader)
+                ) {
                     String line;
                     while ((line = processOutput.readLine()) != null) {
                         Logger.debug(line);
                     }
                 }
                 catch (final Exception exception) { }
+                finally {
+                    Logger.debug("Run.sh reader exiting.");
+                }
             }
-        })).start();
+        });
+        _processInputReadThread.start();
     }
 
     protected void _startDatabaseWindows() throws Exception {
         final File installationDirectory = _databaseProperties.getInstallationDirectory();
-        final File dataDirectory = _databaseProperties.getDataDirectory();
 
         if (_databaseConfiguration != null) {
             _writeConfigFile(WINDOWS_MYSQL_CONFIGURATION_FILE_NAME);
         }
 
-        final File tmpDir = new File(dataDirectory.getPath() + "/tmp");
-        tmpDir.mkdirs();
+        final Long javaPid = SystemUtil.getProcessId();
 
         final String command;
         {
-            final File file = new File(installationDirectory.getPath() + "/base/bin/mysqld.exe");
+            final File file = new File(installationDirectory.getPath() + "/run.bat");
             if (! (file.isFile() && file.canExecute())) {
-                throw new RuntimeException("Unable to start database. Binary not found.");
+                throw new RuntimeException("Unable to start database. Run script not found.");
             }
-            final File baseDir = new File(installationDirectory.getPath() + "/base");
-            final File defaultsFile = new File(dataDirectory.getPath() + "/" + WINDOWS_MYSQL_CONFIGURATION_FILE_NAME);
-            command = (file.getPath() + " --defaults-file=" + defaultsFile.getPath() + " --basedir=" + baseDir.getPath() + " --datadir=" + dataDirectory.getAbsolutePath() + " --tmpdir=" + tmpDir.getAbsolutePath() + " --console");
+            command = (file.getPath() + " " + javaPid);
         }
         final Runtime runtime = Runtime.getRuntime();
         Logger.info("Exec: " + command);
         _process = runtime.exec(command);
 
-        final InputStream inputStream = _process.getInputStream();
-        final BufferedReader processOutput = new BufferedReader(new InputStreamReader(inputStream));
-        (new Thread(new Runnable() {
+        _processOutputStream = _process.getOutputStream();
+        _processInputStream = _process.getInputStream();
+        _processInputReadThread = new Thread(new Runnable() {
             @Override
             public void run() {
-                try {
+                try (
+                    final InputStream inputStream = _processInputStream;
+                    final InputStreamReader inputStreamReader = new InputStreamReader(inputStream);
+                    final BufferedReader processOutput = new BufferedReader(inputStreamReader)
+                ) {
                     String line;
                     while ((line = processOutput.readLine()) != null) {
                         Logger.debug(line);
                     }
                 }
                 catch (final Exception exception) { }
+                finally {
+                    Logger.debug("Run.bat reader exiting.");
+                }
             }
-        })).start();
+        });
+        _processInputReadThread.start();
     }
 
     protected Boolean _isDatabaseOnline() {
@@ -557,16 +632,15 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
     }
 
     public void start() throws Exception {
+        if (! _shutdownHookInstalled) {
+            _installShutdownHook();
+        }
+
         final OperatingSystemType operatingSystemType = _databaseProperties.getOperatingSystemType();
         if (operatingSystemType == OperatingSystemType.WINDOWS) {
-            if (! _shutdownHookInstalled) {
-                _installShutdownHook();
-            }
-
             _startDatabaseWindows();
         }
         else {
-            // NOTE: The shutdown hook is not necessary on Unix because of the intercept trap within its run script.
             _startDatabaseUnix();
         }
 
