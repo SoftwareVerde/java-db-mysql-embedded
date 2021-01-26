@@ -99,8 +99,8 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
         final DatabaseCredentials rootDatabaseCredentials = new DatabaseCredentials("root", _databaseProperties.getRootPassword());
         final DatabaseCredentials databaseCredentials = _databaseProperties.getCredentials();
 
-        final MysqlDatabaseConnectionFactory rootDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(_databaseProperties.getHostname(), _databaseProperties.getPort(), _databaseProperties.getSchema(), rootDatabaseCredentials.username, rootDatabaseCredentials.password, _connectionProperties);
-        final MysqlDatabaseConnectionFactory databaseConnectionFactory = new MysqlDatabaseConnectionFactory(_databaseProperties.getHostname(), _databaseProperties.getPort(), _databaseProperties.getSchema(), databaseCredentials.username, databaseCredentials.password, _connectionProperties);
+        final MysqlDatabaseConnectionFactory rootDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(_databaseProperties.getHostname(), _port, _databaseProperties.getSchema(), rootDatabaseCredentials.username, rootDatabaseCredentials.password, _connectionProperties);
+        final MysqlDatabaseConnectionFactory databaseConnectionFactory = new MysqlDatabaseConnectionFactory(_databaseProperties.getHostname(), _port, _databaseProperties.getSchema(), databaseCredentials.username, databaseCredentials.password, _connectionProperties);
 
         Integer databaseVersionNumber = 0;
 
@@ -561,8 +561,8 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
         final DatabaseCredentials rootDatabaseCredentials = new DatabaseCredentials("root", _databaseProperties.getRootPassword());
         final DatabaseCredentials databaseCredentials = _databaseProperties.getCredentials();
 
-        final MysqlDatabaseConnectionFactory rootDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(_databaseProperties.getHostname(), _databaseProperties.getPort(), "", rootDatabaseCredentials.username, rootDatabaseCredentials.password, _connectionProperties);
-        final MysqlDatabaseConnectionFactory databaseConnectionFactory = new MysqlDatabaseConnectionFactory(_databaseProperties.getHostname(), _databaseProperties.getPort(), _databaseProperties.getSchema(), databaseCredentials.username, databaseCredentials.password, _connectionProperties);
+        final MysqlDatabaseConnectionFactory rootDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(_databaseProperties.getHostname(), _port, "", rootDatabaseCredentials.username, rootDatabaseCredentials.password, _connectionProperties);
+        final MysqlDatabaseConnectionFactory databaseConnectionFactory = new MysqlDatabaseConnectionFactory(_databaseProperties.getHostname(), _port, _databaseProperties.getSchema(), databaseCredentials.username, databaseCredentials.password, _connectionProperties);
 
         try {
             // Attempt to connect via root first since it should always have credentials (but may have been removed)...
@@ -613,8 +613,10 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
 
         _schema = databaseProperties.getSchema();
         _databaseProperties = databaseProperties;
-        _databaseConfiguration = databaseConfiguration;
+        _databaseConfiguration = (databaseConfiguration != null ? new MysqlDatabaseConfiguration(databaseConfiguration) : new MysqlDatabaseConfiguration());
         _databaseInitializer = databaseInitializer;
+
+        _databaseConfiguration.setPort(_port);
     }
 
     protected void setTimeout(final Long timeoutMs) {

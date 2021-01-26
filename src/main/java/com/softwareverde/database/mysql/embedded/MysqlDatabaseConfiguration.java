@@ -72,7 +72,7 @@ public class MysqlDatabaseConfiguration {
 
     protected Integer _myisamSortBufferSize;
 
-    protected Boolean _performanceSchemaEnable;
+    protected Boolean _performanceSchemaIsEnabled;
 
     protected MutableList<String> _getArguments() {
         final MutableList<String> arguments = new MutableList<>(_arguments);
@@ -104,8 +104,8 @@ public class MysqlDatabaseConfiguration {
         _addArgumentIfNotNull(arguments, "--innodb-lru-scan-depth", _innoDbLeastRecentlyUsedScanDepth);
         _addArgumentIfNotNull(arguments, "--myisam-sort-buffer-size", _myisamSortBufferSize);
 
-        if (_performanceSchemaEnable != null) {
-            _addArgumentIfNotNull(arguments, "--performance-schema", (_performanceSchemaEnable ? "ON" : "OFF"));
+        if (_performanceSchemaIsEnabled != null) {
+            _addArgumentIfNotNull(arguments, "--performance-schema", (_performanceSchemaIsEnabled ? "ON" : "OFF"));
         }
 
         { // Slow Query Logging...
@@ -119,8 +119,8 @@ public class MysqlDatabaseConfiguration {
         { // General Log...
             if (_generalLogIsEnabled != null) {
                 _addKeyValuePairArgument(arguments, "--general-log", (_generalLogIsEnabled ? 1 : 0));
+                _addKeyValuePairArgument(arguments, "--general-log-file", _generalLogFileName);
             }
-            _addKeyValuePairArgument(arguments, "--general-log-file", _generalLogFileName);
         }
 
         return arguments;
@@ -128,6 +128,44 @@ public class MysqlDatabaseConfiguration {
 
     public MysqlDatabaseConfiguration() {
         _arguments = new MutableList<>();
+    }
+
+    public MysqlDatabaseConfiguration(final MysqlDatabaseConfiguration databaseConfiguration) {
+        _arguments = new MutableList<>();
+        if (databaseConfiguration == null) { return; }
+
+        _arguments.addAll(databaseConfiguration._arguments);
+        _port = databaseConfiguration._port;
+        _maxConnectionCount = databaseConfiguration._maxConnectionCount;
+        _maxAllowedPacketByteCount = databaseConfiguration._maxAllowedPacketByteCount;
+        _keyBufferByteCount = databaseConfiguration._keyBufferByteCount;
+        _threadStackNestedCallLimit = databaseConfiguration._threadStackNestedCallLimit;
+        _threadCacheThreadCount = databaseConfiguration._threadCacheThreadCount;
+        _tableOpenCacheTableCount = databaseConfiguration._tableOpenCacheTableCount;
+        _maxHeapTableByteCount = databaseConfiguration._maxHeapTableByteCount;
+        _queryCacheMaxResultByteCount = databaseConfiguration._queryCacheMaxResultByteCount;
+        _queryCacheByteCount = databaseConfiguration._queryCacheByteCount;
+        _innoDbBufferPoolInstanceCount = databaseConfiguration._innoDbBufferPoolInstanceCount;
+        _innoDbBufferPoolByteCount = databaseConfiguration._innoDbBufferPoolByteCount;
+        _innoDbLogFileByteCount = databaseConfiguration._innoDbLogFileByteCount;
+        _innoDbLogBufferByteCount = databaseConfiguration._innoDbLogBufferByteCount;
+        _innoDbSlowQueryLogIsEnabled = databaseConfiguration._innoDbSlowQueryLogIsEnabled;
+        _innoDbSlowQueryLogMinimumQueryTime = databaseConfiguration._innoDbSlowQueryLogMinimumQueryTime;
+        _innoDbSlowQueryLogFileName = databaseConfiguration._innoDbSlowQueryLogFileName;
+        _generalLogIsEnabled = databaseConfiguration._generalLogIsEnabled;
+        _generalLogFileName = databaseConfiguration._generalLogFileName;
+        _innoDbFlushLogAtTransactionCommit = databaseConfiguration._innoDbFlushLogAtTransactionCommit;
+        _innoDbFlushMethod = databaseConfiguration._innoDbFlushMethod;
+        _innoDbIoCapacity = databaseConfiguration._innoDbIoCapacity;
+        _innoDbIoCapacityMax = databaseConfiguration._innoDbIoCapacityMax;
+        _innoDbPageCleaners = databaseConfiguration._innoDbPageCleaners;
+        _innoDbMaxDirtyPagesPercent = databaseConfiguration._innoDbMaxDirtyPagesPercent;
+        _innoDbMaxDirtyPagesPercentLowWaterMark = databaseConfiguration._innoDbMaxDirtyPagesPercentLowWaterMark;
+        _innoDbReadIoThreads = databaseConfiguration._innoDbReadIoThreads;
+        _innoDbWriteIoThreads = databaseConfiguration._innoDbWriteIoThreads;
+        _innoDbLeastRecentlyUsedScanDepth = databaseConfiguration._innoDbLeastRecentlyUsedScanDepth;
+        _myisamSortBufferSize = databaseConfiguration._myisamSortBufferSize;
+        _performanceSchemaIsEnabled = databaseConfiguration._performanceSchemaIsEnabled;
     }
 
     /**
@@ -266,8 +304,8 @@ public class MysqlDatabaseConfiguration {
         _myisamSortBufferSize = myisamSortBufferSize;
     }
 
-    public void setPerformanceSchemaEnable(final Boolean performanceSchemaEnable) {
-        _performanceSchemaEnable = performanceSchemaEnable;
+    public void enablePerformanceSchema(final Boolean performanceSchemaIsEnabled) {
+        _performanceSchemaIsEnabled = performanceSchemaIsEnabled;
     }
 
     public List<String> getCommandlineArguments() {
