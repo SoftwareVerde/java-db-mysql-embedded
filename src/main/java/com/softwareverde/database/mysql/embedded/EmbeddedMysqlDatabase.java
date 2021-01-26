@@ -235,6 +235,21 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
         IoUtil.putFileContents(configFileLocation, configFileContents.getBytes(StandardCharsets.UTF_8));
     }
 
+    /**
+     * Stores the data directory location within the installation's `.datadir` file for run.sh/run.bat
+     */
+    protected void _writeDataDirectoryHelper() {
+        final File installationDirectory = _databaseProperties.getInstallationDirectory();
+        final File dataDirectory = _databaseProperties.getDataDirectory();
+
+        final File dataDirectoryHelperFile = new File(installationDirectory.getPath() + "/.datadir");
+        final Path installationDirectoryPath = Paths.get(installationDirectory.getAbsolutePath());
+        final Path dataDirectoryPath = Paths.get(dataDirectory.getAbsolutePath());
+        final Path relativeDataDirectoryPath = installationDirectoryPath.relativize(dataDirectoryPath);
+        final String relativeDataDirectoryPathString = relativeDataDirectoryPath.toString();
+        IoUtil.putFileContents(dataDirectoryHelperFile, relativeDataDirectoryPathString.getBytes(StandardCharsets.UTF_8));
+    }
+
     protected void _installFilesFromManifest() {
         final OperatingSystemType operatingSystemType = _databaseProperties.getOperatingSystemType();
         final File installationDirectory = _databaseProperties.getInstallationDirectory();
@@ -312,6 +327,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
         // If the data directory has already be initialized then exit.
         final Boolean mysqlDataWasAlreadyInstalled = _doesMysqlDataExist(dataDirectory);
         if (mysqlDataWasAlreadyInstalled) {
+            _writeDataDirectoryHelper();
             _writeConfigFile(UNIX_MYSQL_CONFIGURATION_FILE_NAME);
             return;
         }
@@ -372,15 +388,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
             }
         }
 
-        { // Store the data directory location for run.sh
-            final File dataDirectoryHelperFile = new File(installationDirectory.getPath() + "/.datadir");
-            final Path installationDirectoryPath = Paths.get(installationDirectory.getAbsolutePath());
-            final Path dataDirectoryPath = Paths.get(dataDirectory.getAbsolutePath());
-            final Path relativeDataDirectoryPath = installationDirectoryPath.relativize(dataDirectoryPath);
-            final String relativeDataDirectoryPathString = relativeDataDirectoryPath.toString();
-            IoUtil.putFileContents(dataDirectoryHelperFile, relativeDataDirectoryPathString.getBytes(StandardCharsets.UTF_8));
-        }
-
+        _writeDataDirectoryHelper();
         _writeConfigFile(UNIX_MYSQL_CONFIGURATION_FILE_NAME);
     }
 
@@ -395,6 +403,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
         // If the data directory has already be initialized then exit.
         final Boolean mysqlDataWasAlreadyInstalled = _doesMysqlDataExist(dataDirectory);
         if (mysqlDataWasAlreadyInstalled) {
+            _writeDataDirectoryHelper();
             _writeConfigFile(WINDOWS_MYSQL_CONFIGURATION_FILE_NAME);
             return;
         }
@@ -454,14 +463,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
             }
         }
 
-        { // Store the data directory location for run.bat
-            final File dataDirectoryHelperFile = new File(installationDirectory.getPath() + "/.datadir");
-            final Path installationDirectoryPath = Paths.get(installationDirectory.getAbsolutePath());
-            final Path dataDirectoryPath = Paths.get(dataDirectory.getAbsolutePath());
-            final Path relativeDataDirectoryPath = installationDirectoryPath.relativize(dataDirectoryPath);
-            final String relativeDataDirectoryPathString = relativeDataDirectoryPath.toString();
-            IoUtil.putFileContents(dataDirectoryHelperFile, relativeDataDirectoryPathString.getBytes(StandardCharsets.UTF_8));
-        }
+        _writeDataDirectoryHelper();
 
         // NOTE: Since this command will create the data directory if it does not exist, and since the windows
         //  version of the mysql data installer requires the data directory not exist, this command must run after
