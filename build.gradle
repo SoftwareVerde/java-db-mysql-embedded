@@ -8,17 +8,21 @@ version '3.0.0'
 
 sourceCompatibility = 1.8
 
+configurations {
+    serverImplementation.extendsFrom implementation
+    serverRuntimeOnly.extendsFrom runtimeOnly
+
+    testImplementation.extendsFrom serverImplementation
+}
+
 repositories {
     mavenCentral()
     maven { url 'https://jitpack.io' }
 }
 
 dependencies {
-    // implementation  fileTree(dir: 'libs', include: ['*.jar'])
-
-    api             group: 'com.github.softwareverde',  name: 'java-db',                version: 'v3.2.5'
-    api             group: 'com.github.softwareverde',  name: 'java-db-mysql',          version: 'v4.1.0'
-    implementation  group: 'com.github.softwareverde',  name: 'java-util',              version: 'v2.6.1'
+    api             group: 'com.github.softwareverde',  name: 'java-db-mysql',          version: 'v4.2.0'
+    implementation  group: 'com.github.softwareverde',  name: 'java-util',              version: 'v2.7.0'
     implementation  group: 'com.github.softwareverde',  name: 'java-logging',           version: 'v2.2.0'
 
     // OS-Specific Prebuilt Binaries: (not mutually exclusive)
@@ -35,12 +39,19 @@ sourceSets {
         java
         resources
     }
-    test {
+    server {
         java
         resources
 
         compileClasspath += sourceSets.main.output
         runtimeClasspath += sourceSets.main.output
+    }
+    test {
+        java
+        resources
+
+        compileClasspath += sourceSets.server.output
+        runtimeClasspath += sourceSets.server.output
     }
 }
 
@@ -51,21 +62,33 @@ task copyDependencies(type: Copy) {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
-task makeJar(type: Jar) {
+task makeServerJar(type: Jar) {
     manifest {
         attributes  'Implementation-Title': 'Java MySQL Embedded Database',
                     'Implementation-Version': archiveVersion,
-                    'Main-Class': 'com.softwareverde.database.Main',
-                    'Class-Path': (project.configurations.compileClasspath + configurations.runtimeClasspath).collect { 'libs/' + it.getName() }.join(' ')
+                    'Main-Class': 'com.softwareverde.database.mysql.embedded.Main',
+                    'Class-Path': (project.configurations.serverCompileClasspath + configurations.serverRuntimeClasspath).collect { 'libs/' + it.getName() }.join(' ')
     }
-    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    from { configurations.serverCompile.collect { it.isDirectory() ? it : zipTree(it) } }
+
+    archiveBaseName = project.name + '-server'
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from sourceSets.server.output
+
     with jar
+}
+
+task makeJar(type: Jar) {
+    manifest {
+        attributes  'Implementation-Title': 'Java MySQL Embedded Database',
+                    'Implementation-Version': archiveVersion
+    }
 
     archiveBaseName = project.name
 
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
-    from sourceSets.main.output
 
     with jar
 }
@@ -101,12 +124,12 @@ tasks.withType(Javadoc) {
 }
 
 task sourcesJar(type: Jar, dependsOn: classes) {
-    classifier = 'sources'
+    archiveClassifier = 'sources'
     from sourceSets.main.allSource
 }
 
 task javadocJar(type: Jar, dependsOn: javadoc) {
-    classifier = 'javadoc'
+    archiveClassifier = 'javadoc'
     from javadoc.destinationDir
 }
 

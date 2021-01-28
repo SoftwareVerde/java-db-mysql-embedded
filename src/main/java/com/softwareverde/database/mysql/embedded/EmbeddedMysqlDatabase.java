@@ -10,8 +10,10 @@ import com.softwareverde.database.properties.DatabaseCredentials;
 import com.softwareverde.database.query.Query;
 import com.softwareverde.logging.Logger;
 import com.softwareverde.util.IoUtil;
+import com.softwareverde.util.StringUtil;
 import com.softwareverde.util.SystemUtil;
 import com.softwareverde.util.Util;
+import com.softwareverde.util.Version;
 import com.softwareverde.util.timer.NanoTimer;
 
 import java.io.BufferedReader;
@@ -51,22 +53,30 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
         }
     }
 
+    protected static void rethrowException(final Exception exception) throws DatabaseException {
+        if (exception instanceof DatabaseException) {
+            throw (DatabaseException) exception;
+        }
+
+        throw new DatabaseException(exception);
+    }
+
     protected final EmbeddedDatabaseProperties _databaseProperties;
     protected final DatabaseInitializer<Connection> _databaseInitializer;
-    protected final MysqlDatabaseConfiguration _databaseConfiguration;
 
     protected Boolean _shutdownHookInstalled = false;
     protected Long _timeoutMs = (30L * 1000L);
+    protected Long _upgradeTimeoutMs = (60L * 1000L);
     protected Process _process;
     protected OutputStream _processOutputStream;
     protected InputStream _processInputStream;
     protected Thread _processInputReadThread;
 
-    protected void _deleteTestDatabase(final MysqlDatabaseConnection databaseConnection) throws DatabaseException {
+    protected void _deleteTestDatabase(final MysqlDatabaseConnection databaseConnection) throws Exception {
         databaseConnection.executeDdl("DROP DATABASE IF EXISTS `test`");
     }
 
-    protected void _initializeRootAccount(final MysqlDatabaseConnection databaseConnection, final DatabaseCredentials rootCredentials) throws DatabaseException {
+    protected void _initializeRootAccount(final MysqlDatabaseConnection databaseConnection, final DatabaseCredentials rootCredentials) throws Exception {
         final String rootHost = "localhost"; // "127.0.0.1";
         final String systemAccount = "mariadb.sys";
 
@@ -123,7 +133,10 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
         return databaseVersionNumber;
     }
 
-    protected void _initializeDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer, final Properties connectionProperties) throws DatabaseException {
+    /**
+     * Runs the databaseInitializer which handles application-level data upgrade triggers.
+     */
+    protected void _initializeDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer, final Properties connectionProperties) throws Exception {
         final DatabaseCredentials rootCredentials = new DatabaseCredentials("root", databaseProperties.getRootPassword());
 
         final Integer databaseVersionNumber = _getDatabaseVersionNumber();
@@ -210,7 +223,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
                     Logger.debug("Forcibly destroying process.");
                     _process.destroyForcibly();
 
-                    throw new RuntimeException("Unable to stop database. Shutdown failed after timeout.");
+                    throw new Exception("Unable to stop database. Shutdown failed after timeout.");
                 }
             }
             finally {
@@ -229,7 +242,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
 
         dataDirectory.mkdirs();
         final String configFileLocation = (dataDirectory.getPath() + "/" + configurationFileName);
-        final String configFileContents = (_databaseConfiguration != null ? _databaseConfiguration.getDefaultsFile() : "");
+        final String configFileContents = _databaseProperties.getMysqlConfigurationFileContents();
 
         Logger.debug("Writing config file to: " + configFileLocation);
         IoUtil.putFileContents(configFileLocation, configFileContents.getBytes(StandardCharsets.UTF_8));
@@ -261,7 +274,6 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
         }
 
         for (final String manifestEntry : manifest.split("\n")) {
-
             final String flags;
             final String resource;
             {
@@ -299,8 +311,13 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
                 }
             }
 
-            final String destination = (installationDirectory.getPath() + resource.substring(resourcePrefix.length() - 1));
-            Logger.debug("Extracting: " + resource + " to " + destination);
+            final String destination;
+            {
+                final String installationDirectoryPath = installationDirectory.getPath();
+                final String resourcePath = resource.substring(resourcePrefix.length() - 1);
+                destination = (installationDirectoryPath + resourcePath);
+            }
+            Logger.trace("Extracting: " + resource + " to " + destination);
             final File copiedFile = EmbeddedMysqlDatabase.copyFile(inputStream, destination);
             final boolean copyWasSuccessful = (copiedFile != null);
             if (! copyWasSuccessful) {
@@ -344,7 +361,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
             command = (file.getPath() + " " + dataDirectory.getPath());
         }
         final Runtime runtime = Runtime.getRuntime();
-        Logger.info("Exec: " + command);
+        Logger.debug("Exec: " + command);
         Process process = null;
         try {
             process = runtime.exec(command);
@@ -364,7 +381,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
                         try {
                             String line;
                             while ((line = processOutput.readLine()) != null) {
-                                Logger.debug(line);
+                                Logger.trace(line);
                             }
                         }
                         catch (final Exception exception) { }
@@ -390,6 +407,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
 
         _writeDataDirectoryHelper();
         _writeConfigFile(UNIX_MYSQL_CONFIGURATION_FILE_NAME);
+        _setDataDirectoryVersion();
     }
 
     protected void _installWindows() throws Exception {
@@ -424,7 +442,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
             command = (file.getPath() + " --datadir=" + dataDirectory.getPath() + " --password=" + rootPassword);
         }
         final Runtime runtime = Runtime.getRuntime();
-        Logger.info("Exec: " + command);
+        Logger.debug("Exec: " + command);
         Process process = null;
         try {
             process = runtime.exec(command);
@@ -439,7 +457,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
                         try {
                             String line;
                             while ((line = processOutput.readLine()) != null) {
-                                Logger.debug(line);
+                                Logger.trace(line);
                             }
                         }
                         catch (final Exception exception) { }
@@ -464,19 +482,15 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
         }
 
         _writeDataDirectoryHelper();
-
         // NOTE: Since this command will create the data directory if it does not exist, and since the windows
         //  version of the mysql data installer requires the data directory not exist, this command must run after
         //  the data installation completes.
         _writeConfigFile(WINDOWS_MYSQL_CONFIGURATION_FILE_NAME);
+        _setDataDirectoryVersion();
     }
 
     protected void _startDatabaseUnix() throws Exception {
         final File installationDirectory = _databaseProperties.getInstallationDirectory();
-
-        if (_databaseConfiguration != null) {
-            _writeConfigFile(UNIX_MYSQL_CONFIGURATION_FILE_NAME);
-        }
 
         final String command;
         {
@@ -487,7 +501,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
             command = file.getPath();
         }
         final Runtime runtime = Runtime.getRuntime();
-        Logger.info("Exec: " + command);
+        Logger.debug("Exec: " + command);
         _process = runtime.exec(command);
 
         _processOutputStream = _process.getOutputStream();
@@ -507,7 +521,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
                 }
                 catch (final Exception exception) { }
                 finally {
-                    Logger.debug("Run.sh reader exiting.");
+                    Logger.trace("Run.sh reader exiting.");
                 }
             }
         });
@@ -516,10 +530,6 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
 
     protected void _startDatabaseWindows() throws Exception {
         final File installationDirectory = _databaseProperties.getInstallationDirectory();
-
-        if (_databaseConfiguration != null) {
-            _writeConfigFile(WINDOWS_MYSQL_CONFIGURATION_FILE_NAME);
-        }
 
         final Long javaPid = SystemUtil.getProcessId();
 
@@ -532,7 +542,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
             command = (file.getPath() + " " + javaPid);
         }
         final Runtime runtime = Runtime.getRuntime();
-        Logger.info("Exec: " + command);
+        Logger.debug("Exec: " + command);
         _process = runtime.exec(command);
 
         _processOutputStream = _process.getOutputStream();
@@ -552,7 +562,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
                 }
                 catch (final Exception exception) { }
                 finally {
-                    Logger.debug("Run.bat reader exiting.");
+                    Logger.trace("Run.bat reader exiting.");
                 }
             }
         });
@@ -593,78 +603,189 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
             final Boolean databaseIsOnline = _isDatabaseOnline();
             if (databaseIsOnline) { return; }
 
-            Thread.sleep(250L);
+            Thread.sleep(100L);
+
             nanoTimer.stop();
         } while (nanoTimer.getMillisecondsElapsed() < timeoutMs);
 
         if (nanoTimer.getMillisecondsElapsed() >= timeoutMs) {
-            throw new Exception("Server failed to come online after " + timeoutMs + "ms.");
+            throw new DatabaseException("Server failed to come online after " + timeoutMs + "ms.");
         }
     }
 
-    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer) {
-        this(databaseProperties, databaseInitializer, null);
-    }
+    protected void _install() throws Exception {
+        final NanoTimer nanoTimer = new NanoTimer();
+        nanoTimer.start();
 
-    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer, final MysqlDatabaseConfiguration databaseConfiguration) {
-        this(databaseProperties, databaseInitializer, databaseConfiguration, null);
-    }
-
-    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer, final MysqlDatabaseConfiguration databaseConfiguration, final Properties connectionProperties) {
-        super(databaseProperties.getHostname(), databaseProperties.getPort(), databaseProperties.getCredentials().username, databaseProperties.getCredentials().password, connectionProperties);
-
-        _schema = databaseProperties.getSchema();
-        _databaseProperties = databaseProperties;
-        _databaseConfiguration = (databaseConfiguration != null ? new MysqlDatabaseConfiguration(databaseConfiguration) : new MysqlDatabaseConfiguration());
-        _databaseInitializer = databaseInitializer;
-
-        _databaseConfiguration.setPort(_port);
-    }
-
-    protected void setTimeout(final Long timeoutMs) {
-        _timeoutMs = timeoutMs;
-    }
-
-    public void install() throws Exception {
         final OperatingSystemType operatingSystemType = _databaseProperties.getOperatingSystemType();
         if (operatingSystemType == OperatingSystemType.WINDOWS) {
             _installWindows();
-            return;
+        }
+        else {
+            _installUnix();
         }
 
-        _installUnix();
+        nanoTimer.stop();
+        Logger.debug("Database installed in " + nanoTimer.getMillisecondsElapsed() + "ms.");
     }
 
-    public void start() throws Exception {
+    protected void _start() throws Exception {
         if (! _shutdownHookInstalled) {
             _installShutdownHook();
         }
 
+        final NanoTimer nanoTimer = new NanoTimer();
+        nanoTimer.start();
+
         final OperatingSystemType operatingSystemType = _databaseProperties.getOperatingSystemType();
         if (operatingSystemType == OperatingSystemType.WINDOWS) {
+            _writeConfigFile(WINDOWS_MYSQL_CONFIGURATION_FILE_NAME);
             _startDatabaseWindows();
         }
         else {
+            _writeConfigFile(UNIX_MYSQL_CONFIGURATION_FILE_NAME);
             _startDatabaseUnix();
         }
 
-        _waitForDatabaseToComeOnline(_timeoutMs);
+        final Version installationDirectoryVersion = _getInstallationDirectoryVersion();
+        final Version dataDirectoryVersion = _getDataDirectoryVersion();
+
+        if (installationDirectoryVersion == null) { throw new DatabaseException("Database must be installed before it can be started."); }
+        final boolean willUpgrade = (! Util.areEqual(installationDirectoryVersion, dataDirectoryVersion));
+
+        final Long timeoutMs = (willUpgrade ? _upgradeTimeoutMs : _timeoutMs);
+        _waitForDatabaseToComeOnline(timeoutMs);
+
+        if (willUpgrade) {
+            _setDataDirectoryVersion();
+        }
 
         _initializeDatabase(_databaseProperties, _databaseInitializer, _connectionProperties);
+
+        nanoTimer.stop();
+        Logger.debug("Database came online after " + nanoTimer.getMillisecondsElapsed() + "ms.");
     }
 
-    public void stop() throws Exception {
-        _stop();
-    }
-
-    public Boolean wasInstalled() {
-        final File installationDirectory = _databaseProperties.getInstallationDirectory();
+    protected Boolean _isInstalled() {
         final File dataDirectory = _databaseProperties.getDataDirectory();
 
-        final File mariaDbBaseDirectory = new File(installationDirectory + "/base");
-        final boolean mariaDbWasInstalled = mariaDbBaseDirectory.exists();
+        final Version installedVersion = _getInstallationDirectoryVersion();
+        final boolean mariaDbWasInstalled = (installedVersion != null);
         if (! mariaDbWasInstalled) { return false; }
 
         return _doesMysqlDataExist(dataDirectory);
+    }
+
+    protected Version _getInstallationDirectoryVersion() {
+        final File installationDirectory = _databaseProperties.getInstallationDirectory();
+        final File versionFile = new File(installationDirectory.getPath() + "/.version");
+        final byte[] versionContentsBytes = IoUtil.getFileContents(versionFile);
+        if (versionContentsBytes == null) { return null; }
+
+        final String versionContents = StringUtil.bytesToString(versionContentsBytes);
+        return Version.parse(versionContents);
+    }
+
+    protected Version _getDataDirectoryVersion() {
+        final File dataDirectory = _databaseProperties.getDataDirectory();
+        final File versionFile = new File(dataDirectory.getPath() + "/.version");
+        final byte[] versionContentsBytes = IoUtil.getFileContents(versionFile);
+        if (versionContentsBytes == null) { return null; }
+
+        final String versionContents = StringUtil.bytesToString(versionContentsBytes);
+        return Version.parse(versionContents);
+    }
+
+    protected void _setDataDirectoryVersion() {
+        final File installationDirectory = _databaseProperties.getInstallationDirectory();
+        final File dataDirectory = _databaseProperties.getDataDirectory();
+        final File installationVersionFile = new File(installationDirectory.getPath() + "/.version");
+        final File dataVersionFile = new File(dataDirectory.getPath() + "/.version");
+
+        final byte[] versionContents = IoUtil.getFileContents(installationVersionFile);
+        IoUtil.putFileContents(dataVersionFile, versionContents);
+    }
+
+    public EmbeddedMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer) {
+        super(databaseProperties.getHostname(), databaseProperties.getPort(), databaseProperties.getCredentials().username, databaseProperties.getCredentials().password, databaseProperties.getConnectionProperties());
+
+        _schema = databaseProperties.getSchema();
+        _databaseProperties = databaseProperties;
+        _databaseInitializer = databaseInitializer;
+    }
+
+    public void setTimeout(final Long timeoutMs) {
+        _timeoutMs = timeoutMs;
+    }
+
+    public void setUpgradeTimeout(final Long timeoutMs) {
+        _upgradeTimeoutMs = timeoutMs;
+    }
+
+    /**
+     * Attempts to install the database binaries and data files.
+     *  Install will also write/update the configuration files and version files.
+     */
+    public void install() throws DatabaseException {
+        try {
+            _install();
+        }
+        catch (final Exception exception) {
+            EmbeddedMysqlDatabase.rethrowException(exception);
+        }
+    }
+
+    /**
+     * Starts the embedded database and blocks until the database is online.
+     *  If the database has not been installed, it will attempt to install the database binaries, data files,
+     *  configuration files, and version files.
+     */
+    public void start() throws DatabaseException {
+        try {
+            final Boolean isInstalled = _isInstalled();
+            if (! isInstalled) {
+                _install();
+            }
+
+            _start();
+        }
+        catch (final Exception exception) {
+            EmbeddedMysqlDatabase.rethrowException(exception);
+        }
+    }
+
+    /**
+     * Shuts the database down and blocks until the database has gone offline or until the timeout is reached.
+     */
+    public void stop() throws DatabaseException {
+        try {
+            _stop();
+        }
+        catch (final Exception exception) {
+            EmbeddedMysqlDatabase.rethrowException(exception);
+        }
+    }
+
+    /**
+     * Returns true if the database binaries and/or database data files have not been installed.
+     */
+    public Boolean isInstallationRequired() {
+        return (! _isInstalled());
+    }
+
+    /**
+     * Returns the Version of the installed database binaries or null if an installation was not found.
+     */
+    public Version getInstallationDirectoryVersion() {
+        return _getInstallationDirectoryVersion();
+    }
+
+    /**
+     * Returns the Version of the database binaries that were installed when the database last successfully started
+     *  or when the database data files were installed.  This is expected to be the same as the database tables' version.
+     *  Returns null if the data directory was not initialized.
+     */
+    public Version getDataDirectoryVersion() {
+        return _getDataDirectoryVersion();
     }
 }
