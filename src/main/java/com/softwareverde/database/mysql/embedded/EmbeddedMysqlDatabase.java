@@ -349,8 +349,12 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
             return;
         }
 
-        final File dataDirectoryParent = dataDirectory.getParentFile();
-        dataDirectoryParent.mkdirs(); // Ensure the data directory's path exists (but not the data directory itself).
+        { // Ensure the data directory's path exists (but not the data directory itself).
+            final File dataDirectoryParent = dataDirectory.getParentFile();
+            if (dataDirectoryParent != null) {
+                dataDirectoryParent.mkdirs();
+            }
+        }
 
         final String command;
         {
@@ -426,8 +430,12 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
             return;
         }
 
-        final File dataDirectoryParent = dataDirectory.getParentFile();
-        dataDirectoryParent.mkdirs(); // Ensure the data directory's path exists (but not the data directory itself).
+        { // Ensure the data directory's path exists (but not the data directory itself).
+            final File dataDirectoryParent = dataDirectory.getParentFile();
+            if (dataDirectoryParent != null) {
+                dataDirectoryParent.mkdirs();
+            }
+        }
 
         final String command;
         {
@@ -525,6 +533,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
                 }
             }
         });
+        _processInputReadThread.setName("EmbeddedMysqlDatabase - Run Thread");
         _processInputReadThread.start();
     }
 
@@ -566,6 +575,7 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
                 }
             }
         });
+        _processInputReadThread.setName("EmbeddedMysqlDatabase - Run Thread");
         _processInputReadThread.start();
     }
 
