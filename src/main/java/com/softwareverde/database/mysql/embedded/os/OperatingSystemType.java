@@ -1,4 +1,4 @@
-package com.softwareverde.database.mysql.embedded;
+package com.softwareverde.database.mysql.embedded.os;
 
 import com.softwareverde.util.SystemUtil;
 

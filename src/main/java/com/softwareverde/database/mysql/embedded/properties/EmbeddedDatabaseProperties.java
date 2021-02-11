@@ -2,7 +2,7 @@ package com.softwareverde.database.mysql.embedded.properties;
 
 import com.softwareverde.constable.list.List;
 import com.softwareverde.database.jdbc.JdbcDatabaseProperties;
-import com.softwareverde.database.mysql.embedded.OperatingSystemType;
+import com.softwareverde.database.mysql.embedded.os.OperatingSystemType;
 
 import java.io.File;
 

@@ -2,7 +2,7 @@ package com.softwareverde.database.mysql.embedded.properties;
 
 import com.softwareverde.constable.list.List;
 import com.softwareverde.constable.list.mutable.MutableList;
-import com.softwareverde.database.mysql.embedded.OperatingSystemType;
+import com.softwareverde.database.mysql.embedded.os.OperatingSystemType;
 import com.softwareverde.database.properties.DatabaseProperties;
 import com.softwareverde.database.properties.MutableDatabaseProperties;
 
