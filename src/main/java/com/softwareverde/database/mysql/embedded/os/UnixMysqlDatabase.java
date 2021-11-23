@@ -3,6 +3,8 @@ package com.softwareverde.database.mysql.embedded.os;
 import com.softwareverde.database.mysql.embedded.ProcessOutputLogger;
 import com.softwareverde.database.mysql.embedded.properties.EmbeddedDatabaseProperties;
 import com.softwareverde.logging.Logger;
+import com.softwareverde.util.StringUtil;
+import com.softwareverde.util.Util;
 import com.softwareverde.util.timer.NanoTimer;
 
 import java.io.File;
@@ -45,16 +47,20 @@ public class UnixMysqlDatabase extends OperatingSystemSpecificMysqlDatabase {
             }
         }
 
-        final String command;
+        final String[] command = new String[3];
         {
             final File file = new File(installationDirectory.getPath() + "/init.sh");
             if (! (file.isFile() && file.canExecute())) {
                 throw new RuntimeException("Unable to initialize database. Init script not found.");
             }
-            command = (file.getPath() + " " + dataDirectory.getPath());
+            final String dataDirectoryPath = dataDirectory.getPath();
+            final Integer port = _databaseProperties.getPort();
+            command[0] = file.getPath();
+            command[1] = dataDirectoryPath;
+            command[2] = (port != null ? port.toString() : "");
         }
         final Runtime runtime = Runtime.getRuntime();
-        Logger.debug("Exec: " + command);
+        Logger.debug("Exec: " + String.join(" ", command));
         Process process = null;
         try {
             process = runtime.exec(command);

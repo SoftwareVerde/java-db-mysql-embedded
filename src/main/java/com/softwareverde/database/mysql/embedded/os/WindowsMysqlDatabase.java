@@ -44,7 +44,7 @@ public class WindowsMysqlDatabase extends OperatingSystemSpecificMysqlDatabase {
             }
         }
 
-        final String command;
+        final String[] command = new String[3];
         {
             final File file = new File(installationDirectory.getPath() + "/base/bin/mysql_install_db.exe");
             if (! (file.isFile() && file.canExecute())) {
@@ -54,10 +54,12 @@ public class WindowsMysqlDatabase extends OperatingSystemSpecificMysqlDatabase {
             // NOTE: mysql_install_db.exe detects the base directory on its own, and providing it is an error ("unknown variable").
             //  mysql_install_db.exe requires that the data directory is empty.
             //  mysql_install_db.exe generates a minimal my.ini file within the data directory, setting the basedir.
-            command = (file.getPath() + " --datadir=" + dataDirectory.getPath() + " --password=" + rootPassword);
+            command[0] = file.getPath();
+            command[1] = "--datadir=" + dataDirectory.getPath();
+            command[2] = "--password=" + rootPassword;
         }
         final Runtime runtime = Runtime.getRuntime();
-        Logger.debug("Exec: " + command);
+        Logger.debug("Exec: " + String.join(" ", command));
         Process process = null;
         try {
             process = runtime.exec(command);
@@ -102,7 +104,7 @@ public class WindowsMysqlDatabase extends OperatingSystemSpecificMysqlDatabase {
         final String rootPassword = _databaseProperties.getRootPassword();
 
         final String displayCommand;
-        final String command;
+        final String[] command = new String[3];
         {
             final File file = new File(installationDirectory.getPath() + "/upgrade.bat");
             if (! (file.isFile() && file.canExecute())) {
@@ -111,8 +113,13 @@ public class WindowsMysqlDatabase extends OperatingSystemSpecificMysqlDatabase {
             }
 
             final Integer port = _databaseProperties.getPort();
-            command         = (file.getPath() + " " + port + " " + rootPassword);
-            displayCommand  = (file.getPath() + " " + port + " " + "<password>");
+            final String portString = (port != null ? port.toString() : "");
+            final String nonNullRootPassword = (rootPassword != null ? rootPassword : "");
+
+            command[0] = file.getPath();
+            command[1] = portString;
+            command[2] = nonNullRootPassword;
+            displayCommand  = (file.getPath() + " " + portString + " " + "<password>");
         }
         final Runtime runtime = Runtime.getRuntime();
         Logger.debug("Exec: " + displayCommand);
@@ -156,16 +163,17 @@ public class WindowsMysqlDatabase extends OperatingSystemSpecificMysqlDatabase {
 
         final Long javaPid = SystemUtil.getProcessId();
 
-        final String command;
+        final String[] command = new String[2];
         {
             final File file = new File(installationDirectory.getPath() + "/run.bat");
             if (! (file.isFile() && file.canExecute())) {
                 throw new RuntimeException("Unable to start database. Run script not found.");
             }
-            command = (file.getPath() + " " + javaPid);
+            command[0] = file.getPath();
+            command[1] = javaPid.toString();
         }
         final Runtime runtime = Runtime.getRuntime();
-        Logger.debug("Exec: " + command);
+        Logger.debug("Exec: " + String.join(" ", command));
         _process = runtime.exec(command);
 
         _processOutputStream = _process.getOutputStream();
