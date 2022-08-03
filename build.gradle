@@ -4,9 +4,12 @@ plugins {
 }
 
 group 'com.softwareverde'
-version '3.0.3'
+version '3.1.0'
 
-sourceCompatibility = 1.8
+compileJava {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
 
 configurations {
     serverImplementation.extendsFrom implementation
@@ -28,12 +31,12 @@ dependencies {
     implementation  group: 'com.github.softwareverde',  name: 'java-logging',           version: 'v2.2.0'
 
     // OS-Specific Prebuilt Binaries: (not mutually exclusive)
-    // implementation  group: 'com.github.softwareverde',  name: 'java-mariadb-osx',       version: 'v10.5.9-p2'
+    // implementation  group: 'com.github.softwareverde',  name: 'java-mariadb-osx',       version: 'v10.8.3'
     // implementation  group: 'com.github.softwareverde',  name: 'java-mariadb-windows',   version: 'v10.5.9'
-    // implementation  group: 'com.github.softwareverde',  name: 'java-mariadb-linux',     version: 'v10.5.9-p1'
+    // implementation  group: 'com.github.softwareverde',  name: 'java-mariadb-linux',     version: 'v10.8.3'
 
 
-    testImplementation 'junit:junit:4.12'
+    testImplementation group: 'junit', name: 'junit', version: '4.13.2'
 }
 
 sourceSets {
@@ -69,9 +72,9 @@ task makeServerJar(type: Jar) {
         attributes  'Implementation-Title': 'Java MySQL Embedded Database',
                     'Implementation-Version': archiveVersion,
                     'Main-Class': 'com.softwareverde.database.mysql.embedded.Main',
-                    'Class-Path': (project.configurations.serverCompileClasspath + configurations.serverRuntimeClasspath).collect { 'libs/' + it.getName() }.join(' ')
+                    'Class-Path': (project.configurations.serverCompileClasspath + project.configurations.serverRuntimeClasspath).collect { 'libs/' + it.getName() }.join(' ')
     }
-    from { configurations.serverCompile.collect { it.isDirectory() ? it : zipTree(it) } }
+    from { project.configurations.serverCompileClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
 
     archiveBaseName = project.name + '-server'
 

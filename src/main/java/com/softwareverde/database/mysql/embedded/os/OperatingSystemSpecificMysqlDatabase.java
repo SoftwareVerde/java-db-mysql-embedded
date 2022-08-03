@@ -154,6 +154,51 @@ public abstract class OperatingSystemSpecificMysqlDatabase {
                 }
             }
 
+            if (flags.contains("l")) {
+                final String symbolicLinkDelimiter = " -> ";
+                if (! manifestEntry.contains(symbolicLinkDelimiter)) {
+                    throw new RuntimeException("Unable to copy resource: " + resource);
+                }
+
+                final Path link;
+                final Path target;
+                {
+                    final String manifestEntryLink;
+                    final String manifestEntryTarget;
+                    {
+                        final int delimiterIndex = resource.indexOf(symbolicLinkDelimiter);
+                        manifestEntryLink = resource.substring(0, delimiterIndex);
+
+                        final int targetIndex = (delimiterIndex + symbolicLinkDelimiter.length());
+                        manifestEntryTarget = resource.substring(targetIndex);
+                    }
+
+                    final String linkDestinationString; // ex: "mysql/base/bin/mysqld"
+                    {
+                        final String installationDirectoryPath = installationDirectory.getPath();
+
+                        final String linkResourcePath = manifestEntryLink.substring(resourcePrefix.length() - 1);
+                        linkDestinationString = (installationDirectoryPath + linkResourcePath);
+                    }
+
+                    link = Paths.get(linkDestinationString);
+                    target = Paths.get(manifestEntryTarget);
+                }
+
+                Logger.trace("Creating link: " + link + " to " + target);
+                try {
+                    Files.createSymbolicLink(link, target);
+                }
+                catch (final IOException exception) {
+                    throw new RuntimeException(exception);
+                }
+                catch (final UnsupportedOperationException exception) {
+                    Logger.debug("Unable to create symbolic link: " + link); // Windows
+                }
+
+                continue;
+            }
+
             final InputStream inputStream;
             {
                 final InputStream wholeInputStream = IoUtil.getResourceAsStream(resource);
