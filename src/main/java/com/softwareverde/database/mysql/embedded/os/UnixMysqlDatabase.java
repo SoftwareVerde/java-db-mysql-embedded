@@ -3,8 +3,6 @@ package com.softwareverde.database.mysql.embedded.os;
 import com.softwareverde.database.mysql.embedded.ProcessOutputLogger;
 import com.softwareverde.database.mysql.embedded.properties.EmbeddedDatabaseProperties;
 import com.softwareverde.logging.Logger;
-import com.softwareverde.util.StringUtil;
-import com.softwareverde.util.Util;
 import com.softwareverde.util.timer.NanoTimer;
 
 import java.io.File;
@@ -158,6 +156,7 @@ public class UnixMysqlDatabase extends OperatingSystemSpecificMysqlDatabase {
     public void start() throws Exception {
         if (! _shutdownHookInstalled) {
             _installShutdownHook();
+            _shutdownHookInstalled = true;
         }
 
         _writeConfigFile(CONFIGURATION_FILE_NAME);

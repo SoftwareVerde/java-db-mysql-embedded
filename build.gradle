@@ -4,7 +4,7 @@ plugins {
 }
 
 group 'com.softwareverde'
-version '3.1.0'
+version '3.2.0'
 
 compileJava {
     sourceCompatibility = JavaVersion.VERSION_1_8
@@ -27,8 +27,8 @@ dependencies {
     // implementation fileTree(dir: 'libs', include: ['*.jar'])
 
     api             group: 'com.github.softwareverde',  name: 'java-db-mysql',          version: 'v4.2.2'
-    implementation  group: 'com.github.softwareverde',  name: 'java-util',              version: 'v2.7.3'
-    implementation  group: 'com.github.softwareverde',  name: 'java-logging',           version: 'v2.2.0'
+    implementation  group: 'com.github.softwareverde',  name: 'java-util',              version: 'v2.7.5'
+    implementation  group: 'com.github.softwareverde',  name: 'java-logging',           version: 'v2.3.0'
 
     // OS-Specific Prebuilt Binaries: (not mutually exclusive)
     // implementation  group: 'com.github.softwareverde',  name: 'java-mariadb-osx',       version: 'v10.8.3'

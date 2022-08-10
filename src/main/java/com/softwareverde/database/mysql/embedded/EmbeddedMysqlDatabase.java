@@ -12,6 +12,7 @@ import com.softwareverde.database.mysql.embedded.os.UnixMysqlDatabase;
 import com.softwareverde.database.mysql.embedded.os.WindowsMysqlDatabase;
 import com.softwareverde.database.mysql.embedded.properties.EmbeddedDatabaseProperties;
 import com.softwareverde.database.properties.DatabaseCredentials;
+import com.softwareverde.database.properties.DatabaseProperties;
 import com.softwareverde.database.query.Query;
 import com.softwareverde.logging.Logger;
 import com.softwareverde.util.Util;
@@ -48,6 +49,17 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
 
     protected void _deleteTestDatabase(final MysqlDatabaseConnection databaseConnection) throws Exception {
         databaseConnection.executeDdl("DROP DATABASE IF EXISTS `test`");
+        databaseConnection.executeSql(new Query("DELETE FROM mysql.db WHERE db = 'test' OR db = 'test\\_%'"));
+    }
+
+    protected void _removeAnonymousAccounts(final MysqlDatabaseConnection databaseConnection) throws Exception {
+        { // Restrict root to localhost and set root password...
+            databaseConnection.executeSql(
+                new Query("DELETE FROM mysql.global_priv WHERE user=''")
+            );
+
+            databaseConnection.executeSql(new Query("FLUSH PRIVILEGES"));
+        }
     }
 
     protected void _initializeRootAccount(final MysqlDatabaseConnection databaseConnection, final DatabaseCredentials rootCredentials) throws Exception {
@@ -108,19 +120,58 @@ public class EmbeddedMysqlDatabase extends MysqlDatabase {
     }
 
     /**
+     * Returns a root-user ConnectionFactory that has been tested for validity.
+     *  Due to various possible states of database installation, the root user may be insecure or already configured
+     *  with a root password; this function returns the appropriate ConnectionFactory for either case.
+     */
+    protected MysqlDatabaseConnectionFactory _getRootDatabaseConnectionFactory(final DatabaseProperties databaseProperties, final Properties connectionProperties) {
+        final String username = "root";
+        final String hostname = databaseProperties.getHostname();
+        final Integer port = databaseProperties.getPort();
+        final String schema = "";
+
+        final Query testQuery = new Query("SELECT 1");
+
+        { // Attempt to connect via an empty root password...
+            final DatabaseCredentials rootCredentials = new DatabaseCredentials(username, "");
+            final MysqlDatabaseConnectionFactory emptyRootDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(hostname, port, schema, rootCredentials.username, rootCredentials.password, connectionProperties);
+            try (final MysqlDatabaseConnection databaseConnection = emptyRootDatabaseConnectionFactory.newConnection()) {
+                databaseConnection.query(testQuery);
+                return emptyRootDatabaseConnectionFactory;
+            }
+            catch (final DatabaseException exception) { }
+        }
+
+        { // Attempt to connect via the configured root password...
+            final DatabaseCredentials rootCredentials = new DatabaseCredentials(username, databaseProperties.getRootPassword());
+            final MysqlDatabaseConnectionFactory rootDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(hostname, port, schema, rootCredentials.username, rootCredentials.password, connectionProperties);
+            try (final MysqlDatabaseConnection databaseConnection = rootDatabaseConnectionFactory.newConnection()) {
+                databaseConnection.query(testQuery);
+                return rootDatabaseConnectionFactory;
+            }
+            catch (final DatabaseException exception) { }
+        }
+
+        return null;
+    }
+
+    /**
      * Runs the databaseInitializer which handles application-level data upgrade triggers.
      */
     protected void _initializeDatabase(final EmbeddedDatabaseProperties databaseProperties, final DatabaseInitializer<Connection> databaseInitializer, final Properties connectionProperties) throws Exception {
-        final DatabaseCredentials rootCredentials = new DatabaseCredentials("root", databaseProperties.getRootPassword());
-
         final Integer databaseVersionNumber = _getDatabaseVersionNumber();
         if (databaseVersionNumber == 0) {
             Logger.info("Initializing database.");
+
             // If the database version wasn't able to be obtained initially then assume the database needs to be setup for its first run.
-            final MysqlDatabaseConnectionFactory rootDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(databaseProperties.getHostname(), databaseProperties.getPort(), "", rootCredentials.username, rootCredentials.password, connectionProperties);
+            final MysqlDatabaseConnectionFactory rootDatabaseConnectionFactory = _getRootDatabaseConnectionFactory(databaseProperties, connectionProperties);
+            if (rootDatabaseConnectionFactory == null) { throw new DatabaseException("Unable to connect to database via root."); }
             try (final MysqlDatabaseConnection rootDatabaseConnection = rootDatabaseConnectionFactory.newConnection()) {
+                final DatabaseCredentials rootCredentials = new DatabaseCredentials("root", databaseProperties.getRootPassword());
+
                 _initializeRootAccount(rootDatabaseConnection, rootCredentials);
                 _deleteTestDatabase(rootDatabaseConnection);
+                _removeAnonymousAccounts(rootDatabaseConnection);
                 databaseInitializer.initializeSchema(rootDatabaseConnection, databaseProperties);
             }
         }

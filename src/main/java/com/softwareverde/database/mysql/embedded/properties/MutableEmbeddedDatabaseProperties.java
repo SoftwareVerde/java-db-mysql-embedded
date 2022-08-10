@@ -62,6 +62,8 @@ public class MutableEmbeddedDatabaseProperties extends MutableDatabaseProperties
     protected Long _innoDbLogFileByteCount;
     protected Long _innoDbLogBufferByteCount;
 
+    protected Boolean _remoteConnectionsAreEnabled;
+
     protected Boolean _innoDbSlowQueryLogIsEnabled;
     protected Long _innoDbSlowQueryLogMinimumQueryTime;
     protected String _innoDbSlowQueryLogFileName;
@@ -132,6 +134,10 @@ public class MutableEmbeddedDatabaseProperties extends MutableDatabaseProperties
                 _addKeyValuePairArgument(arguments, "--general_log", (_generalLogIsEnabled ? 1 : 0));
                 _addKeyValuePairArgument(arguments, "--general_log_file", _generalLogFileName);
             }
+        }
+
+        if (_remoteConnectionsAreEnabled == null || (! _remoteConnectionsAreEnabled)) {
+            _addKeyValuePairArgument(arguments, "--bind-address", "127.0.0.1");
         }
 
         arguments.sort(new Comparator<String>() {
@@ -351,6 +357,14 @@ public class MutableEmbeddedDatabaseProperties extends MutableDatabaseProperties
 
     public void enablePerformanceSchema(final Boolean performanceSchemaIsEnabled) {
         _performanceSchemaIsEnabled = performanceSchemaIsEnabled;
+    }
+
+    public void enableRemoteConnections() {
+        _remoteConnectionsAreEnabled = true;
+    }
+
+    public void disableRemoteConnections() {
+        _remoteConnectionsAreEnabled = false;
     }
 
     @Override

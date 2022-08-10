@@ -321,32 +321,46 @@ public abstract class OperatingSystemSpecificMysqlDatabase {
     }
 
     protected Boolean _isDatabaseOnline() {
+        final DatabaseCredentials emptyRootDatabaseCredentials = new DatabaseCredentials("root", "");
         final DatabaseCredentials rootDatabaseCredentials = new DatabaseCredentials("root", _databaseProperties.getRootPassword());
         final DatabaseCredentials databaseCredentials = _databaseProperties.getCredentials();
 
+        final String emptySchema = "";
+        final String schema = _databaseProperties.getSchema();
+        final String hostname = _databaseProperties.getHostname();
         final Integer port = _databaseProperties.getPort();
         final Properties connectionProperties = _databaseProperties.getConnectionProperties();
 
-        final MysqlDatabaseConnectionFactory rootDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(_databaseProperties.getHostname(), port, "", rootDatabaseCredentials.username, rootDatabaseCredentials.password, connectionProperties);
-        final MysqlDatabaseConnectionFactory databaseConnectionFactory = new MysqlDatabaseConnectionFactory(_databaseProperties.getHostname(), port, _databaseProperties.getSchema(), databaseCredentials.username, databaseCredentials.password, connectionProperties);
+        final Query testQuery = new Query("SELECT 1");
 
-        try {
-            // Attempt to connect via root first since it should always have credentials (but may have been removed)...
+        {// Attempt to connect via an empty root account (which is the default post-installation state of mysql)...
+            final MysqlDatabaseConnectionFactory emptyRootDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(hostname, port, emptySchema, emptyRootDatabaseCredentials.username, emptyRootDatabaseCredentials.password, connectionProperties);
+            try (final MysqlDatabaseConnection databaseConnection = emptyRootDatabaseConnectionFactory.newConnection()) {
+                databaseConnection.query(testQuery);
+                return true;
+            }
+            catch (final DatabaseException exception) { }
+        }
+
+        { // Attempt to connect via root first since it should always have credentials (but may have been removed)...
+            final MysqlDatabaseConnectionFactory rootDatabaseConnectionFactory = new MysqlDatabaseConnectionFactory(hostname, port, emptySchema, rootDatabaseCredentials.username, rootDatabaseCredentials.password, connectionProperties);
             try (final MysqlDatabaseConnection databaseConnection = rootDatabaseConnectionFactory.newConnection()) {
-                databaseConnection.query(new Query("SELECT 1"));
+                databaseConnection.query(testQuery);
                 return true;
             }
+            catch (final DatabaseException exception) { }
         }
-        catch (final DatabaseException ignoredException) {
-            // If a root connect cannot be established, attempt to connect via user credentials...
+
+        { // If a root connect cannot be established, attempt to connect via user credentials...
+            final MysqlDatabaseConnectionFactory databaseConnectionFactory = new MysqlDatabaseConnectionFactory(hostname, port, schema, databaseCredentials.username, databaseCredentials.password, connectionProperties);
             try (final MysqlDatabaseConnection databaseConnection = databaseConnectionFactory.newConnection()) {
-                databaseConnection.query(new Query("SELECT 1"));
+                databaseConnection.query(testQuery);
                 return true;
             }
-            catch (final DatabaseException exception) {
-                return false;
-            }
+            catch (final DatabaseException exception) { }
         }
+
+        return false;
     }
 
     public OperatingSystemSpecificMysqlDatabase(final EmbeddedDatabaseProperties databaseProperties) {

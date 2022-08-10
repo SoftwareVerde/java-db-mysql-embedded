@@ -155,6 +155,7 @@ public class WindowsMysqlDatabase extends OperatingSystemSpecificMysqlDatabase {
     public void start() throws Exception {
         if (! _shutdownHookInstalled) {
             _installShutdownHook();
+            _shutdownHookInstalled = true;
         }
 
         _writeConfigFile(CONFIGURATION_FILE_NAME);
