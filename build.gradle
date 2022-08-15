@@ -1,10 +1,11 @@
 plugins {
     id 'java'
     id 'java-library'
+    id 'maven-publish'
 }
 
-group 'com.softwareverde'
-version '3.2.0'
+group = 'com.softwareverde'
+version = '3.2.0'
 
 compileJava {
     sourceCompatibility = JavaVersion.VERSION_1_8
@@ -31,12 +32,11 @@ dependencies {
     implementation  group: 'com.github.softwareverde',  name: 'java-logging',           version: 'v2.3.0'
 
     // OS-Specific Prebuilt Binaries: (not mutually exclusive)
-    // implementation  group: 'com.github.softwareverde',  name: 'java-mariadb-osx',       version: 'v10.8.3'
-    // implementation  group: 'com.github.softwareverde',  name: 'java-mariadb-windows',   version: 'v10.5.9'
-    // implementation  group: 'com.github.softwareverde',  name: 'java-mariadb-linux',     version: 'v10.8.3'
+    // serverImplementation    group: 'com.github.softwareverde',  name: 'java-mariadb-osx',       version: 'v10.8.3'
+    // serverImplementation    group: 'com.github.softwareverde',  name: 'java-mariadb-windows',   version: 'v10.5.9'
+    // serverImplementation    group: 'com.github.softwareverde',  name: 'java-mariadb-linux',     version: 'v10.8.3'
 
-
-    testImplementation group: 'junit', name: 'junit', version: '4.13.2'
+    testImplementation  group: 'junit', name: 'junit', version: '4.13.2'
 }
 
 sourceSets {
@@ -74,7 +74,6 @@ task makeServerJar(type: Jar) {
                     'Main-Class': 'com.softwareverde.database.mysql.embedded.Main',
                     'Class-Path': (project.configurations.serverCompileClasspath + project.configurations.serverRuntimeClasspath).collect { 'libs/' + it.getName() }.join(' ')
     }
-    from { project.configurations.serverCompileClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
 
     archiveBaseName = project.name + '-server'
 
@@ -141,4 +140,12 @@ task javadocJar(type: Jar, dependsOn: javadoc) {
 artifacts {
     archives sourcesJar
     archives javadocJar
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
 }
