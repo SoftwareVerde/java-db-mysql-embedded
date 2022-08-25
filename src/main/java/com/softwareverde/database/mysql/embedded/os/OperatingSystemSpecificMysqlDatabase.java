@@ -185,15 +185,23 @@ public abstract class OperatingSystemSpecificMysqlDatabase {
                     target = Paths.get(manifestEntryTarget);
                 }
 
-                Logger.trace("Creating link: " + link + " to " + target);
-                try {
-                    Files.createSymbolicLink(link, target);
-                }
-                catch (final IOException exception) {
-                    throw new RuntimeException(exception);
-                }
-                catch (final UnsupportedOperationException exception) {
-                    Logger.debug("Unable to create symbolic link: " + link); // Windows
+                {
+                    Logger.trace("Creating link: " + link + " to " + target);
+
+                    final File linkFile = link.toFile();
+                    if (linkFile.exists()) {
+                        linkFile.delete();
+                    }
+
+                    try {
+                        Files.createSymbolicLink(link, target);
+                    }
+                    catch (final IOException exception) {
+                        throw new RuntimeException(exception);
+                    }
+                    catch (final UnsupportedOperationException exception) {
+                        Logger.debug("Unable to create symbolic link: " + link); // Windows
+                    }
                 }
 
                 continue;
